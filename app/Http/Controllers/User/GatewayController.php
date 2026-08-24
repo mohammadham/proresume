@@ -37,6 +37,7 @@ class GatewayController extends Controller
         $data['yoco'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'yoco')->first();
         $data['myfatoorah'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'myfatoorah')->first();
         $data['xendit'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'xendit')->first();
+        $data['zarinpal'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'zarinpal')->first();
 
         return view('user.gateways.index', $data);
     }
@@ -263,6 +264,43 @@ class GatewayController extends Controller
                     'sandbox_status' => $request->sandbox_status,
                     'callback_url' => $request->callback_url ?? url('zarinpal/success'),
                     'text' => "پرداخت امن با زرین‌پال"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function zibalUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'merchant_id' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'zibal'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'zibal',
+                'name' => 'Zibal',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'merchant_id' => $request->merchant_id,
+                    'sandbox_status' => $request->sandbox_status,
+                    'description' => $request->description ?? 'پرداخت اشتراک',
+                    'text' => "پرداخت امن با زیبال"
                 ])
             ]
         );

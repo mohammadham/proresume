@@ -524,6 +524,10 @@ Route::domain($domain)->group(function () {
         Route::post('/zendit/update', 'User\GatewayController@updateXenditInfo')->name('user.zendit.update');
         Route::post('/yoco/update', 'User\GatewayController@updateYocoInfo')->name('user.yoco.update');
         Route::post('/zarinpal/update', 'User\GatewayController@zarinpalUpdate')->name('user.zarinpal.update');
+        Route::post('/zibal/update', 'User\GatewayController@zibalUpdate')->name('user.zibal.update');
+        Route::post('/idpay/update', 'User\GatewayController@idpayUpdate')->name('user.idpay.update');
+        Route::post('/nextpay/update', 'User\GatewayController@nextpayUpdate')->name('user.nextpay.update');
+        Route::post('/payir/update', 'User\GatewayController@payirUpdate')->name('user.payir.update');
 
         // User Offline Gateway Routes
         Route::get('/offline/gateways', 'User\GatewayController@offline')->name('user.gateway.offline');
@@ -854,6 +858,10 @@ Route::domain($domain)->group(function () {
             Route::post('/xendit', 'Admin\GatewayController@updateXenditInfo')->name('admin.update_xendit_info');
             Route::post('/perfect-money', 'Admin\GatewayController@updatePerfectMoneyInfo')->name('admin.update_perfect_money_info');
             Route::post('/zarinpal', 'Admin\GatewayController@zarinpalUpdate')->name('admin.zarinpal.update');
+            Route::post('/zibal', 'Admin\GatewayController@zibalUpdate')->name('admin.zibal.update');
+            Route::post('/idpay', 'Admin\GatewayController@idpayUpdate')->name('admin.idpay.update');
+            Route::post('/nextpay', 'Admin\GatewayController@nextpayUpdate')->name('admin.nextpay.update');
+            Route::post('/payir', 'Admin\GatewayController@payirUpdate')->name('admin.payir.update');
 
             // Admin Offline Gateway Routes
             Route::get('/offline/gateways', 'Admin\GatewayController@offline')->name('admin.gateway.offline');
@@ -1010,6 +1018,22 @@ Route::domain($domain)->group(function () {
             // ZarinPal routes
             Route::get('zarinpal/success', 'Payment\ZarinPalController@successPayment')->name('membership.zarinpal.success');
             Route::get('zarinpal/cancel', 'Payment\ZarinPalController@cancelPayment')->name('membership.zarinpal.cancel');
+
+            // Zibal routes
+            Route::get('zibal/success', 'Payment\ZibalController@successPayment')->name('membership.zibal.success');
+            Route::get('zibal/cancel', 'Payment\ZibalController@cancelPayment')->name('membership.zibal.cancel');
+
+            // IDPay routes
+            Route::get('idpay/success', 'Payment\IdPayController@success')->name('membership.idpay.success');
+            Route::get('idpay/cancel', 'Payment\IdPayController@cancel')->name('membership.idpay.cancel');
+
+            // NextPay routes
+            Route::get('nextpay/success', 'Payment\NextPayController@success')->name('membership.nextpay.success');
+            Route::get('nextpay/cancel', 'Payment\NextPayController@cancel')->name('membership.nextpay.cancel');
+
+            // Pay.ir routes
+            Route::get('payir/success', 'Payment\PayIrController@success')->name('membership.payir.success');
+            Route::get('payir/cancel', 'Payment\PayIrController@cancel')->name('membership.payir.cancel');
         });
     });
 });
@@ -1120,6 +1144,31 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             ->name('customer.appointment.perfect_money.notify');
         Route::get('/perfect_money/cancel', 'User\Payment\PerfectMoneyController@cancelPayment')
             ->name('customer.appointment.perfect_money.cancel');
+
+        Route::get('/zarinpal/notify', 'User\Payment\ZarinPalController@successPayment')
+            ->name('customer.appointment.zarinpal.notify');
+        Route::get('/zarinpal/cancel', 'User\Payment\ZarinPalController@cancelPayment')
+            ->name('customer.appointment.zarinpal.cancel');
+
+        Route::get('/zibal/notify', 'User\Payment\ZibalController@successPayment')
+            ->name('customer.appointment.zibal.notify');
+        Route::get('/zibal/cancel', 'User\Payment\ZibalController@cancelPayment')
+            ->name('customer.appointment.zibal.cancel');
+
+        Route::get('/idpay/notify', 'User\Payment\IdPayController@success')
+            ->name('customer.appointment.idpay.notify');
+        Route::get('/idpay/cancel', 'User\Payment\IdPayController@cancel')
+            ->name('customer.appointment.idpay.cancel');
+
+        Route::get('/nextpay/notify', 'User\Payment\NextPayController@success')
+            ->name('customer.appointment.nextpay.notify');
+        Route::get('/nextpay/cancel', 'User\Payment\NextPayController@cancel')
+            ->name('customer.appointment.nextpay.cancel');
+
+        Route::get('/payir/notify', 'User\Payment\PayIrController@success')
+            ->name('customer.appointment.payir.notify');
+        Route::get('/payir/cancel', 'User\Payment\PayIrController@cancel')
+            ->name('customer.appointment.payir.cancel');
     });
 
     // user redirect to dashboard route

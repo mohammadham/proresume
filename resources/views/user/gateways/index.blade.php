@@ -1601,5 +1601,196 @@
                 </form>
             </div>
         </div>
+
+        <!-- ZarinPal -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="zarinpalForm" action="{{ route('user.zarinpal.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('ZarinPal') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('ZarinPal Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($zarinpal) && $zarinpal->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($zarinpal) && $zarinpal->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif
+                                </div>
+
+                                @php $zarinpalInfo = isset($zarinpal) ? json_decode($zarinpal->information, true) : null; @endphp
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$zarinpalInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$zarinpalInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Merchant ID') }}</label>
+                                    <input type="text" class="form-control" name="merchant_id"
+                                        value="{{ @$zarinpalInfo['merchant_id'] }}">
+                                    @if ($errors->has('merchant_id'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('merchant_id') }}</p>
+                                    @endif
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Callback URL') }}</label>
+                                    <input type="text" class="form-control" name="callback_url"
+                                        value="{{ @$zarinpalInfo['callback_url'] ?? url('zarinpal/success') }}">
+                                    <small class="form-text text-muted">{{ __('Leave empty to use default') }}</small>
+                                    @if ($errors->has('callback_url'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('callback_url') }}</p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="zarinpalForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Zibal -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="zibalForm" action="{{ route('user.zibal.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('Zibal') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('Zibal Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($zibal) && $zibal->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($zibal) && $zibal->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif
+                                </div>
+
+                                @php $zibalInfo = isset($zibal) ? json_decode($zibal->information, true) : null; @endphp
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$zibalInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$zibalInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Merchant ID') }}</label>
+                                    <input type="text" class="form-control" name="merchant_id"
+                                        value="{{ @$zibalInfo['merchant_id'] }}">
+                                    @if ($errors->has('merchant_id'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('merchant_id') }}</p>
+                                    @endif
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Description') }}</label>
+                                    <input type="text" class="form-control" name="description"
+                                        value="{{ @$zibalInfo['description'] ?? 'پرداخت اشتراک' }}">
+                                    @if ($errors->has('description'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('description') }}</p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="zibalForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 @endsection
