@@ -370,6 +370,24 @@ class GatewayController extends Controller
         return redirect()->back();
     }
 
+    public function zarinpalUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'merchant_id' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $zarinpal = PaymentGateway::where('keyword', 'zarinpal')->firstOrFail();
+        $zarinpal->status = $request->status;
+        $zarinpal->information = json_encode([
+            'merchant_id' => $request->merchant_id,
+            'sandbox_status' => $request->sandbox_status,
+            'callback_url' => $request->callback_url ?? url('zarinpal/success'),
+        ]);
+        $zarinpal->save();
+        return back()->with('success', 'ZarinPal Information Updated Successfully');
+    }
+
     public function offline(Request $request)
     {
         $data['ogateways'] = OfflineGateway::orderBy('id', 'DESC')->get();

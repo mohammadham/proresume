@@ -523,6 +523,7 @@ Route::domain($domain)->group(function () {
         Route::post('/paytabs/update', 'User\GatewayController@updatePaytabsInfo')->name('user.paytabs.update');
         Route::post('/zendit/update', 'User\GatewayController@updateXenditInfo')->name('user.zendit.update');
         Route::post('/yoco/update', 'User\GatewayController@updateYocoInfo')->name('user.yoco.update');
+        Route::post('/zarinpal/update', 'User\GatewayController@zarinpalUpdate')->name('user.zarinpal.update');
 
         // User Offline Gateway Routes
         Route::get('/offline/gateways', 'User\GatewayController@offline')->name('user.gateway.offline');
@@ -852,6 +853,7 @@ Route::domain($domain)->group(function () {
             Route::post('/myfatoorah', 'Admin\GatewayController@updateMyFatoorahInfo')->name('admin.update_myfatoorah_info');
             Route::post('/xendit', 'Admin\GatewayController@updateXenditInfo')->name('admin.update_xendit_info');
             Route::post('/perfect-money', 'Admin\GatewayController@updatePerfectMoneyInfo')->name('admin.update_perfect_money_info');
+            Route::post('/zarinpal', 'Admin\GatewayController@zarinpalUpdate')->name('admin.zarinpal.update');
 
             // Admin Offline Gateway Routes
             Route::get('/offline/gateways', 'Admin\GatewayController@offline')->name('admin.gateway.offline');
@@ -1004,6 +1006,10 @@ Route::domain($domain)->group(function () {
 
             Route::get('/perfect_money/success', 'Payment\PerfectMoneyController@successPayment')->name('membership.perfect_money.success');
             Route::get('perfect_money/cancel', 'Payment\PerfectMoneyController@cancelPayment')->name('membership.perfect_money.cancel');
+
+            // ZarinPal routes
+            Route::get('zarinpal/success', 'Payment\ZarinPalController@successPayment')->name('membership.zarinpal.success');
+            Route::get('zarinpal/cancel', 'Payment\ZarinPalController@cancelPayment')->name('membership.zarinpal.cancel');
         });
     });
 });

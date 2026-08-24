@@ -234,6 +234,43 @@ class GatewayController extends Controller
         return back();
     }
 
+    public function zarinpalUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'merchant_id' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'zarinpal'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'zarinpal',
+                'name' => 'ZarinPal',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'merchant_id' => $request->merchant_id,
+                    'sandbox_status' => $request->sandbox_status,
+                    'callback_url' => $request->callback_url ?? url('zarinpal/success'),
+                    'text' => "پرداخت امن با زرین‌پال"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
     public function updateToyyibpayInfo(Request $request)
     {
         $rules = [

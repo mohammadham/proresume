@@ -1549,6 +1549,107 @@
             </div>
         </div>
 
+        {{-- ZarinPal Information --}}
+        <div class="col-lg-4">
+            <div class="card">
+                <form action="{{ route('admin.zarinpal.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('ZarinPal') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('ZarinPal Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ $zarinpal && $zarinpal->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ $zarinpal && $zarinpal->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif
+                                </div>
+
+                                @php $zarinpalInfo = json_decode(@$zarinpal->information, true); @endphp
+
+                                <div class="form-group">
+                                    <label>{{ __('ZarinPal Merchant ID') }}</label>
+                                    <input type="text" class="form-control" name="merchant_id"
+                                        value="{{ @$zarinpalInfo['merchant_id'] }}">
+                                    @if ($errors->has('merchant_id'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('merchant_id') }}</p>
+                                    @endif
+                                    <p class="text-warning mt-1 mb-0">
+                                        {{ __('You can get your Merchant ID from ZarinPal dashboard') }}
+                                    </p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Mode') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$zarinpalInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$zarinpalInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif
+                                    <p class="text-warning mt-1 mb-0">
+                                        {{ __('Enable sandbox mode for testing. Use test merchant ID:') }} <strong>XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXX</strong>
+                                    </p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Callback URL') }}</label>
+                                    <input type="text" class="form-control" name="callback_url"
+                                        value="{{ @$zarinpalInfo['callback_url'] ?? url('zarinpal/success') }}"
+                                        readonly>
+                                    <p class="text-warning mt-1 mb-0">
+                                        {{ __('This URL will be used as callback. Set this in your ZarinPal account.') }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="row">
+                            <div class="col-12 text-center">
+                                <button type="submit" class="btn btn-success">
+                                    {{ __('Update') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
 
 
     </div>
