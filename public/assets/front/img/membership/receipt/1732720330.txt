@@ -1,0 +1,57 @@
+     @foreach ($packageInfos as $packageInfo)
+                  @if (!empty($packageInfo->package))
+                    <div class="swiper-slide swiper-slide-duplicate aos-init aos-animate swiper-slide-duplicate-active"
+                      data-aos="fade-up" data-swiper-slide-index="{{ $packageInfo->id }}" role="group"
+                      aria-label="1 / 2">
+                      <div class="row g-0 product-default product-column border radius-md mb-25 align-items-center">
+                        <figure class="product-img col-sm-12 col-md-5">
+                          <a href="{{ route('package_details', ['id' => $packageInfo->package_id, 'slug' => $packageInfo->slug]) }}"
+                            class="lazy-container ratio ratio-5-4" target="_self" title="Link">
+                            <img class=" ls-is-cached lazyloaded"
+                              src="{{ asset('assets/img/packages/' . $packageInfo->package->featured_img) }}"
+                              data-src="{{ asset('assets/img/packages/' . $packageInfo->package->featured_img) }}"
+                              alt="Product">
+                          </a>
+                        </figure>
+                        <div class="product-details col-sm-12 col-md-7">
+                          <div class="d-flex align-items-center gap-3">
+                            <span class="product-tag border radius-sm">
+                              {{ $packageInfo->packageCategory->name }}
+                            </span>
+                            @if ($packageInfo->package->pricing_type != 'negotiable')
+                              <div class="product-price">
+                                <span
+                                  class="h6 new-price color-primary">{{ $currencyInfo->base_currency_symbol_position == 'left' ? $currencyInfo->base_currency_symbol : '' }}
+                                  {{ $packageInfo->package->package_price }}
+                                  {{ $currencyInfo->base_currency_symbol_position == 'right' ? $currencyInfo->base_currency_symbol : '' }}
+                                  {{ '(' . strtoupper($packageInfo->package->pricing_type) . ')' }}</span>
+
+                              </div>
+                            @else
+                              <span class="h6 new-price color-primary"></strong>{{ __('Negotiable') }}</strong></span>
+                            @endif
+                          </div>
+                          <h5 class="product-title lc-2 mt-2 mb-15">
+                            <a href="{{ route('package_details', ['id' => $packageInfo->package_id, 'slug' => $packageInfo->slug]) }}"
+                              target="_self"
+                              title="Link">{{ strlen($packageInfo->title) > 50 ? mb_substr($packageInfo->title, 0, 150, 'utf-8') . '...' : $packageInfo->title }}</a>
+                          </h5>
+
+                          <ul class="product-icon-list list-unstyled d-flex align-items-center">
+                            <li class="icon-start">
+                              <i class="fal fa-calender-check"></i>
+                              <span>{{ $packageInfo->package->number_of_days }}
+                                {{ $packageInfo->package->number_of_days == 1 ? __('Day') : __('Days') }} </span>
+                            </li>
+
+                            <li class="icon-start">
+                              <i class="fal fa-user-friends"></i>
+                              <span>{{ $packageInfo->package->max_persons != null ? $packageInfo->package->max_persons : '-' }}
+                                {{ __('Person') }}</span>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  @endif
+                @endforeach
