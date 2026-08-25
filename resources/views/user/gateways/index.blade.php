@@ -1792,5 +1792,263 @@
                 </form>
             </div>
         </div>
+
+        <!-- IDPay -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="idpayForm" action="{{ route('user.idpay.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('IDPay') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('IDPay Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($idpay) && $idpay->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($idpay) && $idpay->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif>
+                                </div>
+
+                                @php $idpayInfo = isset($idpay) ? json_decode($idpay->information, true) : null; @endphp
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$idpayInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$idpayInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('API Key') }}</label>
+                                    <input type="text" class="form-control" name="api_key"
+                                        value="{{ @$idpayInfo['api_key'] }}">
+                                    @if ($errors->has('api_key'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('api_key') }}</p>
+                                    @endif>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="idpayForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- NextPay -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="nextpayForm" action="{{ route('user.nextpay.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('NextPay') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('NextPay Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($nextpay) && $nextpay->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($nextpay) && $nextpay->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif>
+                                </div>
+
+                                @php $nextpayInfo = isset($nextpay) ? json_decode($nextpay->information, true) : null; @endphp
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$nextpayInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$nextpayInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('API Key') }}</label>
+                                    <input type="text" class="form-control" name="api_key"
+                                        value="{{ @$nextpayInfo['api_key'] }}">
+                                    @if ($errors->has('api_key'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('api_key') }}</p>
+                                    @endif>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="nextpayForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Pay.ir -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="payirForm" action="{{ route('user.payir.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('Pay.ir') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('Pay.ir Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($payir) && $payir->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($payir) && $payir->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif>
+                                </div>
+
+                                @php $payirInfo = isset($payir) ? json_decode($payir->information, true) : null; @endphp
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$payirInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$payirInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('API Key') }}</label>
+                                    <input type="text" class="form-control" name="api_key"
+                                        value="{{ @$payirInfo['api_key'] }}">
+                                    @if ($errors->has('api_key'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('api_key') }}</p>
+                                    @endif>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="payirForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 @endsection

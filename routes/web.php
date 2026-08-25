@@ -1024,16 +1024,16 @@ Route::domain($domain)->group(function () {
             Route::get('zibal/cancel', 'Payment\ZibalController@cancelPayment')->name('membership.zibal.cancel');
 
             // IDPay routes
-            Route::get('idpay/success', 'Payment\IdPayController@success')->name('membership.idpay.success');
-            Route::get('idpay/cancel', 'Payment\IdPayController@cancel')->name('membership.idpay.cancel');
+            Route::get('idpay/success', 'User\Payment\IdPayController@successPayment')->name('membership.idpay.success');
+            Route::get('idpay/cancel', 'User\Payment\IdPayController@cancelPayment')->name('membership.idpay.cancel');
 
             // NextPay routes
-            Route::get('nextpay/success', 'Payment\NextPayController@success')->name('membership.nextpay.success');
-            Route::get('nextpay/cancel', 'Payment\NextPayController@cancel')->name('membership.nextpay.cancel');
+            Route::get('nextpay/success', 'User\Payment\NextPayController@successPayment')->name('membership.nextpay.success');
+            Route::get('nextpay/cancel', 'User\Payment\NextPayController@cancelPayment')->name('membership.nextpay.cancel');
 
             // Pay.ir routes
-            Route::get('payir/success', 'Payment\PayIrController@success')->name('membership.payir.success');
-            Route::get('payir/cancel', 'Payment\PayIrController@cancel')->name('membership.payir.cancel');
+            Route::get('payir/success', 'User\Payment\PayIrController@successPayment')->name('membership.payir.success');
+            Route::get('payir/cancel', 'User\Payment\PayIrController@cancelPayment')->name('membership.payir.cancel');
         });
     });
 });
@@ -1155,19 +1155,19 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
         Route::get('/zibal/cancel', 'User\Payment\ZibalController@cancelPayment')
             ->name('customer.appointment.zibal.cancel');
 
-        Route::get('/idpay/notify', 'User\Payment\IdPayController@success')
+        Route::get('/idpay/notify', 'User\Payment\IdPayController@successPayment')
             ->name('customer.appointment.idpay.notify');
-        Route::get('/idpay/cancel', 'User\Payment\IdPayController@cancel')
+        Route::get('/idpay/cancel', 'User\Payment\IdPayController@cancelPayment')
             ->name('customer.appointment.idpay.cancel');
 
-        Route::get('/nextpay/notify', 'User\Payment\NextPayController@success')
+        Route::get('/nextpay/notify', 'User\Payment\NextPayController@successPayment')
             ->name('customer.appointment.nextpay.notify');
-        Route::get('/nextpay/cancel', 'User\Payment\NextPayController@cancel')
+        Route::get('/nextpay/cancel', 'User\Payment\NextPayController@cancelPayment')
             ->name('customer.appointment.nextpay.cancel');
 
-        Route::get('/payir/notify', 'User\Payment\PayIrController@success')
+        Route::get('/payir/notify', 'User\Payment\PayIrController@successPayment')
             ->name('customer.appointment.payir.notify');
-        Route::get('/payir/cancel', 'User\Payment\PayIrController@cancel')
+        Route::get('/payir/cancel', 'User\Payment\PayIrController@cancelPayment')
             ->name('customer.appointment.payir.cancel');
     });
 

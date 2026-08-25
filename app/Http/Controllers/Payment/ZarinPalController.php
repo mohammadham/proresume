@@ -14,6 +14,8 @@ use App\Models\PaymentGateway;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Redirect;
 
 class ZarinPalController extends Controller
@@ -68,22 +70,56 @@ class ZarinPalController extends Controller
             $response = Http::timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
+            Log::channel('payment')->info('ZarinPal payment initiation (admin)', [
+                'amount' => $price,
+                'sandbox' => $this->sandbox_mode,
+                'status' => $result['data']['code'] ?? 'unknown',
+                'has_authority' => isset($result['data']['authority']),
+            ]);
+
             if (isset($result['data']['code']) && $result['data']['code'] == 100) {
                 $authority = $result['data']['authority'];
                 Session::put('zarinpal_authority', $authority);
-                
+
                 $payment_url = $this->sandbox_mode == 1
                     ? 'https://sandbox.zarinpal.com/pg/StartPay/' . $authority
                     : 'https://www.zarinpal.com/pg/StartPay/' . $authority;
 
                 return Redirect::away($payment_url);
             } else {
-                $error_message = $result['errors']['message'] ?? 'خطا در اتصال به درگاه پرداخت';
+                $error_code = $result['data']['code'] ?? 0;
+                $error_messages = [
+                    -9 => 'خطای اعتبارسنجی داده‌ها',
+                    -10 => 'مرچنت کد یافت نشد',
+                    -11 => 'مرچنت غیرفعال است',
+                    -12 => 'مبلغ نامعتبر است',
+                    -13 => 'مبلغ کمتر از حداقل مجاز',
+                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
+                    -15 => 'تراکنش تکراری',
+                    -16 => 'خطای داخلی',
+                    -17 => 'IP مسدود شده',
+                    -18 => 'مرچنت تایید نشده',
+                    -19 => 'Callback URL نامعتبر',
+                    -20 => 'Description نامعتبر',
+                    -21 => 'موبایل نامعتبر',
+                    -22 => 'ایمیل نامعتبر',
+                ];
+                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در اتصال به درگاه پرداخت');
+
+                Log::channel('payment')->warning('ZarinPal payment initiation failed (admin)', [
+                    'error_code' => $error_code,
+                    'error_message' => $error_message,
+                ]);
+
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
+            Log::channel('payment')->error('ZarinPal payment initiation error (admin)', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
-        }
+        } 
     }
 
     public function successPayment(Request $request)
@@ -96,36 +132,41 @@ class ZarinPalController extends Controller
         $authority = $request->get('Authority');
         $status = $request->get('Status');
         $stored_authority = Session::get('zarinpal_authority');
-        $amount = Session::get('amount');
-        $cancel_url = route('membership.zarinpal.cancel');
 
-        // Verify authority matches
-        if ($authority != $stored_authority) {
-            return redirect($cancel_url)->with('error', 'کد مرجع پرداخت معتبر نیست');
+        $cancel_url = route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1]);
+
+        // Verify session authority matches callback authority
+        if (!$stored_authority || $stored_authority !== $authority) {
+            Log::channel('payment')->warning('ZarinPal callback: authority mismatch', [
+                'stored' => $stored_authority,
+                'received' => $authority,
+            ]);
+            return redirect($cancel_url)->with('error', 'جلسه منقضی شده یا نامعتبر است. لطفاً مجدداً تلاش کنید.');
         }
 
-        // Check if payment was successful on ZarinPal side
-        if ($status != 'OK') {
-            return redirect($cancel_url)->with('error', 'پرداخت توسط کاربر لغو شد یا ناموفق بود');
-        }
+        if ($status == 'OK' && $authority) {
+            // Prepare data for ZarinPal verification API
+            $api_url = $this->sandbox_mode == 1
+                ? 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
+                : 'https://api.zarinpal.com/pg/v4/payment/verify.json';
 
-        // Verify payment with ZarinPal API
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
-            : 'https://api.zarinpal.com/pg/v4/payment/verify.json';
+            $payload = [
+                'merchant_id' => $this->merchant_id,
+                'authority' => $authority,
+                'amount' => Session::get('amount'),
+            ];
 
-        $payload = [
-            'merchant_id' => $this->merchant_id,
-            'amount' => $amount,
-            'authority' => $authority
-        ];
+            try {
+                $response = Http::timeout(30)->post($api_url, $payload);
+                $result = $response->json();
 
-        try {
-            $response = Http::timeout(30)->post($api_url, $payload);
-            $result = $response->json();
+                Log::channel('payment')->info('ZarinPal payment verification (admin)', [
+                    'authority' => $authority,
+                    'status' => $result['data']['code'] ?? 'unknown',
+                    'ref_id' => $result['data']['ref_id'] ?? null,
+                ]);
 
-            // Code 100 = Success, 101 = Already verified
-            if (isset($result['data']['code']) && in_array($result['data']['code'], [100, 101])) {
+                if (isset($result['data']['code']) && ($result['data']['code'] == 100 || $result['data']['code'] == 101)) {
                 $ref_id = $result['data']['ref_id'] ?? '';
                 $paymentFor = Session::get('paymentFor');
                 $package = Package::find($requestData['package_id']);
@@ -198,14 +239,66 @@ class ZarinPalController extends Controller
                     return redirect()->route('success.page');
                 }
             } else {
-                $error_message = $result['errors']['message'] ?? 'خطا در تایید پرداخت';
+                $error_code = $result['data']['code'] ?? 0;
+                $error_messages = [
+                    -9 => 'خطای اعتبارسنجی داده‌ها',
+                    -10 => 'مرچنت کد یافت نشد',
+                    -11 => 'مرچنت غیرفعال است',
+                    -12 => 'مبلغ نامعتبر است',
+                    -13 => 'مبلغ کمتر از حداقل مجاز',
+                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
+                    -15 => 'تراکنش تکراری',
+                    -16 => 'خطای داخلی',
+                    -17 => 'IP مسدود شده',
+                    -18 => 'مرچنت تایید نشده',
+                    -19 => 'Callback URL نامعتبر',
+                    -20 => 'Description نامعتبر',
+                    -21 => 'موبایل نامعتبر',
+                    -22 => 'ایمیل نامعتبر',
+                    -30 => 'تراکنش یافت نشد',
+                    -31 => 'تراکنش تایید شده است',
+                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
+                    -33 => 'تراکنش انقضا یافته',
+                    -34 => 'تراکنش لغو شده',
+                    -35 => 'تراکنش نامعتبر',
+                    -36 => 'تراکنش تکراری',
+                    -40 => 'خطای سیستمی',
+                    -41 => 'مرچنت تایید نشده',
+                    -42 => 'تراکنش در انتظار تایید',
+                    -50 => 'خطای بانک',
+                    -51 => 'بانک در دسترس نیست',
+                    -52 => 'خطای شبکه',
+                    -53 => 'مبلغ کمتر از حداقل',
+                    -54 => 'مبلغ بیشتر از حداکثر',
+                ];
+                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در تایید پرداخت');
+
+                Log::channel('payment')->warning('ZarinPal payment verification failed (admin)', [
+                    'authority' => $authority,
+                    'error_code' => $error_code,
+                    'error_message' => $error_message,
+                ]);
+
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
+            Log::channel('payment')->error('ZarinPal payment verification error (admin)', [
+                'authority' => $authority,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
         }
+    } else {
+        $error_message = ($status == 'NOK') ? 'پرداخت توسط کاربر لغو شد یا ناموفق بود.' : 'پرداخت ناموفق بود.';
+        Log::channel('payment')->warning('ZarinPal payment cancelled/failed (admin)', [
+            'status' => $status,
+            'authority' => $authority,
+        ]);
+        return redirect($cancel_url)->with('error', $error_message);
+    }
 
-        return redirect($cancel_url);
+    return redirect($cancel_url);
     }
 
     public function cancelPayment()
@@ -233,5 +326,119 @@ class ZarinPalController extends Controller
         $file_name = 'invoice_' . $transaction_id . '.pdf';
         // Invoice generation logic would go here
         return $file_name;
+    }
+
+    /**
+     * Refund a payment
+     *
+     * @param string $authority The authority from original payment
+     * @param float|null $amount Amount to refund (null = full refund)
+     * @param string $reason Reason for refund
+     * @return array Result with success status and message
+     */
+    public function refund($authority, $amount = null, $reason = 'Refund requested')
+    {
+        $api_url = $this->sandbox_mode == 1
+            ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
+            : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
+
+        $payload = [
+            'merchant_id' => $this->merchant_id,
+            'authority' => $authority,
+        ];
+
+        if ($amount !== null) {
+            $payload['amount'] = $amount;
+        }
+
+        try {
+            $response = Http::timeout(30)->post($api_url, $payload);
+            $result = $response->json();
+
+            Log::channel('payment')->info('ZarinPal refund request (admin)', [
+                'authority' => $authority,
+                'amount' => $amount,
+                'status' => $result['data']['code'] ?? 'unknown',
+                'ref_id' => $result['data']['ref_id'] ?? null,
+            ]);
+
+            if (isset($result['data']['code']) && $result['data']['code'] == 100) {
+                return [
+                    'success' => true,
+                    'message' => 'بازپرداخت با موفقیت انجام شد.',
+                    'ref_id' => $result['data']['ref_id'] ?? null,
+                ];
+            } else {
+                $error_code = $result['data']['code'] ?? 0;
+                $error_messages = [
+                    -9 => 'خطای اعتبارسنجی داده‌ها',
+                    -10 => 'مرچنت کد یافت نشد',
+                    -11 => 'مرچنت غیرفعال است',
+                    -12 => 'مبلغ نامعتبر است',
+                    -13 => 'مبلغ کمتر از حداقل مجاز',
+                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
+                    -15 => 'تراکنش تکراری',
+                    -16 => 'خطای داخلی',
+                    -17 => 'IP مسدود شده',
+                    -18 => 'مرچنت تایید نشده',
+                    -19 => 'Callback URL نامعتبر',
+                    -20 => 'Description نامعتبر',
+                    -21 => 'موبایل نامعتبر',
+                    -22 => 'ایمیل نامعتبر',
+                    -30 => 'تراکنش یافت نشد',
+                    -31 => 'تراکنش تایید شده است',
+                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
+                    -33 => 'تراکنش انقضا یافته',
+                    -34 => 'تراکنش لغو شده',
+                    -35 => 'تراکنش نامعتبر',
+                    -36 => 'تراکنش تکراری',
+                    -40 => 'خطای سیستمی',
+                    -41 => 'مرچنت تایید نشده',
+                    -42 => 'تراکنش در انتظار تایید',
+                    -50 => 'خطای بانک',
+                    -51 => 'بانک در دسترس نیست',
+                    -52 => 'خطای شبکه',
+                    -53 => 'مبلغ کمتر از حداقل',
+                    -54 => 'مبلغ بیشتر از حداکثر',
+                    -60 => 'بازپرداخت امکان‌پذیر نیست',
+                    -61 => 'مبلغ بازپرداخت بیشتر از مبلغ تراکنش',
+                ];
+                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در بازپرداخت');
+
+                Log::channel('payment')->warning('ZarinPal refund failed (admin)', [
+                    'authority' => $authority,
+                    'error_code' => $error_code,
+                    'error_message' => $error_message,
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => $error_message,
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::channel('payment')->error('ZarinPal refund error (admin)', [
+                'authority' => $authority,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Void a payment (cancel before settlement)
+     *
+     * @param string $authority The authority from original payment
+     * @return array Result with success status and message
+     */
+    public function void($authority)
+    {
+        // ZarinPal doesn't have a direct void API, but we can attempt refund with full amount
+        // if the payment is still in a voidable state (typically within 24 hours)
+        return $this->refund($authority, null, 'Payment voided');
     }
 }

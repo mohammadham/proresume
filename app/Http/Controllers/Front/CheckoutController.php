@@ -41,6 +41,9 @@ use App\Http\Controllers\Payment\FlutterWaveController;
 use App\Http\Controllers\Payment\MercadopagoController;
 use App\Http\Controllers\Payment\AuthorizenetController;
 use App\Http\Controllers\Payment\PerfectMoneyController;
+use App\Http\Controllers\User\Payment\IdPayController;
+use App\Http\Controllers\User\Payment\NextPayController;
+use App\Http\Controllers\User\Payment\PayIrController;
 
 class CheckoutController extends Controller
 {
@@ -328,6 +331,24 @@ class CheckoutController extends Controller
             $cancel_url = route('membership.xendit.cancel');
             $payment = new XenditController();
             return $payment->paymentProcess($request, $amount, $success_url, $cancel_url, $title, $be);
+        } elseif ($request->payment_method == 'IdPay') {
+            $amount = $request->price;
+            $success_url = route('membership.idpay.success');
+            $cancel_url = route('membership.idpay.cancel');
+            $payment = new IdPayController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'NextPay') {
+            $amount = $request->price;
+            $success_url = route('membership.nextpay.success');
+            $cancel_url = route('membership.nextpay.cancel');
+            $payment = new NextPayController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Pay.ir') {
+            $amount = $request->price;
+            $success_url = route('membership.payir.success');
+            $cancel_url = route('membership.payir.cancel');
+            $payment = new PayIrController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
         } elseif (in_array($request->payment_method, $offline_payment_gateways)) {
             $request['mode'] = 'offline';
             $request['status'] = 0;
