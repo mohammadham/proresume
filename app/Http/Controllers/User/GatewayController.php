@@ -738,7 +738,7 @@ class GatewayController extends Controller
                 'type' => 'automatic',
                 'information' => json_encode([
                     'api_key' => $request->api_key,
-                    'sandbox_status' => $request->sandbox_status,
+                    'sandbox' => $request->sandbox_status,
                     'text' => "پرداخت امن با آی دی پی"
                 ])
             ]
@@ -774,7 +774,7 @@ class GatewayController extends Controller
                 'type' => 'automatic',
                 'information' => json_encode([
                     'api_key' => $request->api_key,
-                    'sandbox_status' => $request->sandbox_status,
+                    'sandbox' => $request->sandbox_status,
                     'text' => "پرداخت امن با نکست پی"
                 ])
             ]
@@ -810,7 +810,7 @@ class GatewayController extends Controller
                 'type' => 'automatic',
                 'information' => json_encode([
                     'api_key' => $request->api_key,
-                    'sandbox_status' => $request->sandbox_status,
+                    'sandbox' => $request->sandbox_status,
                     'text' => "پرداخت امن با پی.ای آر"
                 ])
             ]

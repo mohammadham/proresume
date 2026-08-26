@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Helpers\MegaMailer;
 use App\Models\Language;
 use App\Models\PaymentGateway;
+use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
@@ -45,10 +46,14 @@ class ZarinPalController extends Controller
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
 
+        // Generate unique order ID for idempotency
+        $orderId = 'ZARINPAL_' . Str::uuid()->toString();
+
         // Store request data in session for later use
         Session::put('request', $request->all());
         Session::put('amount', $_amount);
         Session::put('paymentFor', Session::get('paymentFor'));
+        Session::put('zarinpal_order_id', $orderId);
 
         // Prepare data for ZarinPal API
         $api_url = $this->sandbox_mode == 1 
@@ -62,7 +67,8 @@ class ZarinPalController extends Controller
             'description' => $this->description,
             'metadata' => [
                 'mobile' => $request->phone ?? '',
-                'email' => $request->email ?? ''
+                'email' => $request->email ?? '',
+                'order_id' => $orderId
             ]
         ];
 
@@ -75,10 +81,24 @@ class ZarinPalController extends Controller
                 'sandbox' => $this->sandbox_mode,
                 'status' => $result['data']['code'] ?? 'unknown',
                 'has_authority' => isset($result['data']['authority']),
+                'order_id' => $orderId,
             ]);
 
             if (isset($result['data']['code']) && $result['data']['code'] == 100) {
                 $authority = $result['data']['authority'];
+
+                // Save transaction with idempotency key
+                Transaction::create([
+                    'user_id' => auth()->id() ?? null,
+                    'gateway_id' => PaymentGateway::whereKeyword('zarinpal')->value('id'),
+                    'amount' => $price,
+                    'transaction_id' => $authority,
+                    'order_id' => $orderId,
+                    'status' => 'pending',
+                    'currency' => 'IRR',
+                    'ip' => $request->ip(),
+                ]);
+
                 Session::put('zarinpal_authority', $authority);
 
                 $payment_url = $this->sandbox_mode == 1
@@ -131,17 +151,19 @@ class ZarinPalController extends Controller
         
         $authority = $request->get('Authority');
         $status = $request->get('Status');
-        $stored_authority = Session::get('zarinpal_authority');
 
         $cancel_url = route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1]);
 
-        // Verify session authority matches callback authority
-        if (!$stored_authority || $stored_authority !== $authority) {
-            Log::channel('payment')->warning('ZarinPal callback: authority mismatch', [
-                'stored' => $stored_authority,
-                'received' => $authority,
+        // Find transaction by authority (stored as transaction_id)
+        $transaction = Transaction::where('transaction_id', $authority)
+            ->whereHas('gateway', function($q) { $q->where('keyword', 'zarinpal'); })
+            ->first();
+
+        if (!$transaction) {
+            Log::channel('payment')->warning('ZarinPal callback: transaction not found', [
+                'authority' => $authority,
             ]);
-            return redirect($cancel_url)->with('error', 'جلسه منقضی شده یا نامعتبر است. لطفاً مجدداً تلاش کنید.');
+            return redirect($cancel_url)->with('error', 'تراکنش یافت نشد. لطفاً مجدداً تلاش کنید.');
         }
 
         if ($status == 'OK' && $authority) {
@@ -153,7 +175,7 @@ class ZarinPalController extends Controller
             $payload = [
                 'merchant_id' => $this->merchant_id,
                 'authority' => $authority,
-                'amount' => Session::get('amount'),
+                'amount' => $transaction->amount,
             ];
 
             try {
@@ -175,6 +197,12 @@ class ZarinPalController extends Controller
                     'authority' => $authority,
                     'ref_id' => $ref_id,
                     'code' => $result['data']['code']
+                ]);
+
+                // Update transaction status
+                $transaction->update([
+                    'status' => 'success',
+                    'tracking_code' => $ref_id,
                 ]);
 
                 if ($paymentFor == 'membership') {
@@ -240,6 +268,10 @@ class ZarinPalController extends Controller
                 }
             } else {
                 $error_code = $result['data']['code'] ?? 0;
+                
+                // Update transaction status to failed
+                $transaction->update(['status' => 'failed']);
+                
                 $error_messages = [
                     -9 => 'خطای اعتبارسنجی داده‌ها',
                     -10 => 'مرچنت کد یافت نشد',
@@ -280,6 +312,8 @@ class ZarinPalController extends Controller
                 ]);
 
                 return redirect($cancel_url)->with('error', $error_message);
+// Update transaction status to failed
+            $transaction->update(['status' => 'failed']);
             }
         } catch (\Exception $e) {
             Log::channel('payment')->error('ZarinPal payment verification error (admin)', [
@@ -305,9 +339,21 @@ class ZarinPalController extends Controller
     {
         $requestData = Session::get('request');
         $paymentFor = Session::get('paymentFor');
+        $authority = Session::get('zarinpal_authority');
+        
         session()->flash('warning', __('cancel_payment'));
         Session::forget('zarinpal_authority');
         
+        // Update transaction status if authority exists
+        if ($authority) {
+            $transaction = Transaction::where('transaction_id', $authority)
+                ->whereHas('gateway', function($q) { $q->where('keyword', 'zarinpal'); })
+                ->first();
+            if ($transaction) {
+                $transaction->update(['status' => 'cancelled']);
+            }
+        }
+
         if ($paymentFor == 'membership') {
             return redirect()
                 ->route('front.register.view', ['status' => $requestData['package_type'], 'id' => $requestData['package_id']])

@@ -284,6 +284,95 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
         $file_name = 'invoice_' . $transaction_id . '.pdf';
         return $file_name;
     }
-}
+/**
+     * Refund a payment
+     *
+     * @param string $transId The transId from original payment
+     * @param float|null $amount Amount to refund (null = full refund)
+     * @param string $reason Reason for refund
+     * @return array Result with success status and message
+     */
+    public function refund($transId, $amount = null, $reason = 'Refund requested')
+    {
+        $apiUrl = 'https://api.nextpay.org/v1/payments/refund';
+
+        $gateway = UserPaymentGateway::whereKeyword('nextpay')->where('user_id', getUser()->id)->first();
+        $gatewayInfo = json_decode($gateway->information, true);
+        $apiKey = $gatewayInfo['api_key'] ?? '';
+        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+
+        if (!$apiKey) {
+            return [
+                'success' => false,
+                'message' => 'درگاه NextPay تنظیم نشده است.',
+            ];
+        }
+
+        $payload = [
+            'api_key' => $apiKey,
+            'trans_id' => $transId,
+        ];
+
+        if ($amount !== null) {
+            $payload['amount'] = $amount;
+        }
+
+        try {
+            $response = Http::timeout(30)->withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post($sandbox ? 'https://api.sandbox.nextpay.org/v1/payments/refund' : $apiUrl, $payload);
+
+            $result = $response->json();
+
+            Log::channel('payment')->info('NextPay refund request (user)', [
+                'trans_id' => $transId,
+                'amount' => $amount,
+                'code' => $result['code'] ?? 'unknown',
+            ]);
+
+            if ($response->successful() && isset($result['code']) && $result['code'] == 0) {
+                return [
+                    'success' => true,
+                    'message' => 'بازپرداخت با موفقیت انجام شد.',
+                    'ref_id' => $transId,
+                ];
+            } else {
+                $error_message = $result['message'] ?? 'خطا در بازپرداخت';
+                
+                Log::channel('payment')->warning('NextPay refund failed (user)', [
+                    'trans_id' => $transId,
+                    'error_message' => $error_message,
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => $error_message,
+                ];
+            }
+        } catch (\\Exception $e) {
+            Log::channel('payment')->error('NextPay refund error (user)', [
+                'trans_id' => $transId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+            ];
+        }
     }
+
+    /**
+     * Void a payment (cancel before settlement)
+     *
+     * @param string $transId The transId from original payment
+     * @return array Result with success status and message
+     */
+    public function void($transId)
+    {
+        // NextPay doesn't have a direct void API, but we can attempt refund with full amount
+        // if the payment is still in a voidable state
+        return $this->refund($transId, null, 'Payment voided');
+    }
+}
 }
