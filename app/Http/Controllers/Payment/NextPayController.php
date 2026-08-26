@@ -8,13 +8,13 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use App\Models\Package;
 
 class NextPayController extends Controller
 {
     protected $gateway;
-    protected $apiUrl = 'https://api.nextpay.org/v1/payments/create';
-    protected $verifyUrl = 'https://api.nextpay.org/v1/payments/verify';
+    protected string $apiUrl = 'https://nextpay.org/nx/gateway/token';
+    protected string $verifyUrl = 'https://nextpay.org/nx/gateway/verify';
 
     public function __construct()
     {

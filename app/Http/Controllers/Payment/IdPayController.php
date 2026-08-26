@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Models\Package;
 
 class IdPayController extends Controller
 {
@@ -24,17 +25,19 @@ class IdPayController extends Controller
     public function payment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:1000',
+            'package_id' => 'required|integer|exists:packages,id',
         ]);
 
-        $amount = $request->amount;
+        $package = Package::findOrFail($request->package_id);
+        // IDPay uses Rial - multiply Toman by 10
+        $amount = (int) round($package->price * 10);
         $orderId = 'IDPAY_' . Str::uuid()->toString();
         $callbackUrl = route('membership.idpay.success');
 
         $user = auth()->user();
         $gatewayInfo = json_decode($this->gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return back()->with('error', 'درگاه IDPay تنظیم نشده است.');
@@ -96,6 +99,7 @@ class IdPayController extends Controller
             ]);
             return back()->with('error', 'خطا در پرداخت: ' . $e->getMessage());
         }
+    
     }
 
     public function success(Request $request)
@@ -197,7 +201,7 @@ class IdPayController extends Controller
 
         $gatewayInfo = json_decode($this->gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return [
@@ -249,7 +253,7 @@ class IdPayController extends Controller
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
+        } catch (\Exception $e) {
             Log::channel('payment')->error('IDPay refund error (admin)', [
                 'payment_id' => $paymentId,
                 'error' => $e->getMessage(),

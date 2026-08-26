@@ -15,6 +15,7 @@ use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Redirect;
 
@@ -54,14 +55,17 @@ class ZibalController extends Controller
         Session::put('paymentFor', Session::get('paymentFor'));
         Session::put('zibal_order_id', $orderId);
 
-        // Prepare data for Zibal API
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/request'
-            : 'https://gateway.zibal.ir/v1/request';
+        // Prepare data for Zibal API - always use production URL
+        $api_url = 'https://gateway.zibal.ir/v1/request';
+
+        // Sandbox mode: use 'zibal' as merchant ID
+        $merchant = $this->sandbox_mode == 1 ? 'zibal' : $this->merchant_id;
+        // Amount in Rial (Zibal uses Rial)
+        $amountInRial = $price * 10;
 
         $payload = [
-            'merchant' => $this->merchant_id,
-            'amount' => $price, // Amount in Tomans
+            'merchant' => $merchant,
+            'amount' => $amountInRial, // Amount in Rial
             'callbackUrl' => $this->callback_url,
             'description' => $this->description,
             'mobile' => $request->phone ?? '',
@@ -79,7 +83,7 @@ class ZibalController extends Controller
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => PaymentGateway::whereKeyword('zibal')->value('id'),
-                    'amount' => $price,
+                    'amount' => $amountInRial,
                     'transaction_id' => $trackId,
                     'order_id' => $orderId,
                     'status' => 'pending',
@@ -89,9 +93,8 @@ class ZibalController extends Controller
 
                 Session::put('zibal_track_id', $trackId);
 
-                $payment_url = $this->sandbox_mode == 1
-                    ? 'https://sandbox.zibal.ir/start/' . $trackId
-                    : 'https://gateway.zibal.ir/start/' . $trackId;
+                // Always use production payment URL
+                $payment_url = 'https://gateway.zibal.ir/start/' . $trackId;
 
                 return Redirect::away($payment_url);
             } else {
@@ -129,10 +132,8 @@ class ZibalController extends Controller
             return redirect($cancel_url)->with('error', 'پرداخت توسط کاربر لغو شد یا ناموفق بود');
         }
 
-        // Verify payment with Zibal API
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/verify'
-            : 'https://gateway.zibal.ir/v1/verify';
+        // Verify payment with Zibal API - always use production URL
+        $api_url = 'https://gateway.zibal.ir/v1/verify';
 
         $payload = [
             'merchant' => $this->merchant_id,
@@ -283,9 +284,7 @@ return redirect($cancel_url);
      */
     public function refund($trackId, $amount = null, $reason = 'Refund requested')
     {
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/refund'
-            : 'https://gateway.zibal.ir/v1/refund';
+        $api_url = 'https://gateway.zibal.ir/v1/refund';
 
         $payload = [
             'merchant' => $this->merchant_id,
@@ -326,7 +325,7 @@ return redirect($cancel_url);
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
+        } catch (\Exception $e) {
             Log::channel('payment')->error('Zibal refund error (admin)', [
                 'trackId' => $trackId,
                 'error' => $e->getMessage(),
