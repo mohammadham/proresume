@@ -92,7 +92,7 @@ class PayIrController extends Controller
 
                 return Redirect::away($payment_link);
             } else {
-                $error_message = $result['errorMessage'] ?? $result['status'] ?? 'خطا در اتصال به درگاه پرداخت';
+                $error_message = $result['errorMessage'] ?? $result['status'] ?? 'خطa در اتصال به درگاه پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
@@ -100,10 +100,11 @@ class PayIrController extends Controller
                 'order_id' => $order_id,
                 'error' => $e->getMessage(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطa در اتصال به درگاه پرداخت: ' . $e->getMessage());
         }
     }
-public function successPayment(Request $request)
+
+    public function successPayment(Request $request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
@@ -168,7 +169,7 @@ public function successPayment(Request $request)
                         return $this->handleExtendSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs);
                     }
                 } else {
-                    $error_message = $result['errorMessage'] ?? 'خطا در تایید پرداخت';
+                    $error_message = $result['errorMessage'] ?? 'خطa در تایید پرداخت';
                     return redirect($cancel_url)->with('error', $error_message);
                 }
             } catch (\Exception $e) {
@@ -176,7 +177,7 @@ public function successPayment(Request $request)
                     'trans_id' => $trans_id,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+                return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
             }
         } else {
             $error_messages = [
@@ -188,13 +189,40 @@ public function successPayment(Request $request)
                 '-5' => 'اطلاعات ارسال شده نامعتبر است.',
                 '-6' => 'درگاه غیر فعال است.',
                 '-7' => 'پرداخت لغو شده توسط کاربر.',
-                '-8' => 'خطای داخلی سیستم.',
+                '-8' => 'خطa داخلی سیستم.',
             ];
             return redirect($cancel_url)->with('error', $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status);
         }
 
         return redirect($cancel_url);
-private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)
+    }
+
+    public function cancelPayment()
+    {
+        $requestData = Session::get('request');
+        $paymentFor = Session::get('paymentFor');
+        session()->flash('warning', __('cancel_payment'));
+        Session::forget('payir_trans_id');
+        Session::forget('payir_order_id');
+
+        if ($paymentFor == 'membership') {
+            return redirect()
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1])
+                ->withInput($requestData);
+        } else {
+            return redirect()
+                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
+                ->withInput($requestData);
+        }
+    }
+
+    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
+    {
+        $file_name = 'invoice_' . $transaction_id . '.pdf';
+        return $file_name;
+    }
+
+    private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)
     {
         $package = Package::findOrFail($requestData['package_id']);
         $lastMemb = $user->memberships()->orderBy('id', 'DESC')->first();
@@ -257,31 +285,6 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
         return redirect()->route('success.page');
     }
 
-    public function cancelPayment()
-    {
-        $requestData = Session::get('request');
-        $paymentFor = Session::get('paymentFor');
-        session()->flash('warning', __('cancel_payment'));
-        Session::forget('payir_trans_id');
-        Session::forget('payir_order_id');
-
-        if ($paymentFor == 'membership') {
-            return redirect()
-                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1])
-                ->withInput($requestData);
-        } else {
-            return redirect()
-                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
-                ->withInput($requestData);
-        }
-    }
-
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
-    }
-
     /**
      * Refund a payment
      *
@@ -297,7 +300,7 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
         $gateway = UserPaymentGateway::whereKeyword('payir')->where('user_id', getUser()->id)->first();
         $gatewayInfo = json_decode($gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return [
@@ -322,12 +325,6 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
 
             $result = $response->json();
 
-            Log::channel('payment')->info('Pay.ir refund request (user)', [
-                'trans_id' => $transId,
-                'amount' => $amount,
-                'status' => $result['status'] ?? 'unknown',
-            ]);
-
             if ($response->successful() && isset($result['status']) && $result['status'] == 1) {
                 return [
                     'success' => true,
@@ -335,27 +332,16 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
                     'ref_id' => $transId,
                 ];
             } else {
-                $error_message = $result['errorMessage'] ?? 'خطا در بازپرداخت';
-                
-                Log::channel('payment')->warning('Pay.ir refund failed (user)', [
-                    'trans_id' => $transId,
-                    'error_message' => $error_message,
-                ]);
-
+                $error_message = $result['errorMessage'] ?? 'خطa در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
-            Log::channel('payment')->error('Pay.ir refund error (user)', [
-                'trans_id' => $transId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+        } catch (\Exception $e) {
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
             ];
         }
     }
@@ -368,8 +354,6 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
      */
     public function void($transId)
     {
-        // Pay.ir doesn't have a direct void API, but we can attempt refund with full amount
-        // if the payment is still in a voidable state
         return $this->refund($transId, null, 'Payment voided');
     }
 }

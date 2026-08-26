@@ -44,6 +44,8 @@ use App\Http\Controllers\Payment\PerfectMoneyController;
 use App\Http\Controllers\User\Payment\IdPayController;
 use App\Http\Controllers\User\Payment\NextPayController;
 use App\Http\Controllers\User\Payment\PayIrController;
+use App\Http\Controllers\User\Payment\ZarinPalController;
+use App\Http\Controllers\User\Payment\ZibalController;
 
 class CheckoutController extends Controller
 {
@@ -342,6 +344,18 @@ class CheckoutController extends Controller
             $success_url = route('membership.nextpay.success');
             $cancel_url = route('membership.nextpay.cancel');
             $payment = new NextPayController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'ZarinPal') {
+            $amount = $request->price;
+            $success_url = route('membership.zarinpal.success');
+            $cancel_url = route('membership.zarinpal.cancel');
+            $payment = new ZarinPalController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Zibal') {
+            $amount = $request->price;
+            $success_url = route('membership.zibal.success');
+            $cancel_url = route('membership.zibal.cancel');
+            $payment = new ZibalController();
             return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
         } elseif ($request->payment_method == 'Pay.ir') {
             $amount = $request->price;

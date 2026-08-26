@@ -93,7 +93,7 @@ class IdPayController extends Controller
 
                 return Redirect::away($payment_link);
             } else {
-                $error_message = $result['error_message'] ?? $result['error_code'] ?? 'خطا در اتصال به درگاه پرداخت';
+                $error_message = $result['error_message'] ?? $result['error_code'] ?? 'خطa در اتصال به درگاه پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
@@ -101,10 +101,11 @@ class IdPayController extends Controller
                 'order_id' => $order_id,
                 'error' => $e->getMessage(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطa در اتصال به درگاه پرداخت: ' . $e->getMessage());
         }
     }
-public function successPayment(Request $request)
+
+    public function successPayment(Request $request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
@@ -171,13 +172,59 @@ public function successPayment(Request $request)
                         return $this->handleExtendSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs);
                     }
                 } else {
-                    $error_message = $result['error_message'] ?? 'خطا در تایید پرداخت';
+                    $error_message = $result['error_message'] ?? 'خطa در تایید پرداخت';
                     return redirect($cancel_url)->with('error', $error_message);
                 }
             } catch (\Exception $e) {
                 Log::channel('payment')->error('IDPay payment verification error', [
                     'payment_id' => $payment_id,
-private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)
+                    'error' => $e->getMessage(),
+                ]);
+                return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+            }
+        } else {
+            $error_messages = [
+                '-1' => 'ارسال اطلاعات ناموفق بود.',
+                '-2' => 'خطa داخلی سیستم.',
+                '-3' => 'اطلاعات ارسال شده نامعتبر است.',
+                '-4' => 'مبلغ کمتر از حداقل مجاز است.',
+                '-5' => 'مبلغ بیشتر از حداکثر مجاز است.',
+                '-6' => 'تراکنش تکراری است.',
+                '-7' => 'IP Address شما مسدود شده است.',
+                '-8' => 'حداقل مبلغ برای این درگاه 10,000 ریال است.',
+            ];
+            return redirect($cancel_url)->with('error', $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status);
+        }
+
+        return redirect($cancel_url);
+    }
+
+    public function cancelPayment()
+    {
+        $requestData = Session::get('request');
+        $paymentFor = Session::get('paymentFor');
+        session()->flash('warning', __('cancel_payment'));
+        Session::forget('idpay_payment_id');
+        Session::forget('idpay_order_id');
+
+        if ($paymentFor == 'membership') {
+            return redirect()
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1])
+                ->withInput($requestData);
+        } else {
+            return redirect()
+                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
+                ->withInput($requestData);
+        }
+    }
+
+    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
+    {
+        $file_name = 'invoice_' . $transaction_id . '.pdf';
+        return $file_name;
+    }
+
+    private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)
     {
         $package = Package::findOrFail($requestData['package_id']);
         $lastMemb = $user->memberships()->orderBy('id', 'DESC')->first();
@@ -239,51 +286,6 @@ private function handleMembershipSuccess($user, $requestData, $transaction_id, $
         Session::forget('idpay_order_id');
         return redirect()->route('success.page');
     }
-                    'error' => $e->getMessage(),
-                ]);
-                return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
-            }
-        } else {
-            $error_messages = [
-                '-1' => 'ارسال اطلاعات ناموفق بود.',
-                '-2' => 'خطای داخلی سیستم.',
-public function cancelPayment()
-    {
-        $requestData = Session::get('request');
-        $paymentFor = Session::get('paymentFor');
-        session()->flash('warning', __('cancel_payment'));
-        Session::forget('idpay_payment_id');
-        Session::forget('idpay_order_id');
-
-        if ($paymentFor == 'membership') {
-            return redirect()
-                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1])
-                ->withInput($requestData);
-        } else {
-            return redirect()
-                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
-                ->withInput($requestData);
-        }
-    }
-
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
-    }
-}
-                '-3' => 'اطلاعات ارسال شده نامعتبر است.',
-                '-4' => 'مبلغ کمتر از حداقل مجاز است.',
-                '-5' => 'مبلغ بیشتر از حداکثر مجاز است.',
-                '-6' => 'تراکنش تکراری است.',
-                '-7' => 'IP Address شما مسدود شده است.',
-                '-8' => 'حداقل مبلغ برای این درگاه 10,000 ریال است.',
-            ];
-            return redirect($cancel_url)->with('error', $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status);
-        }
-
-        return redirect($cancel_url);
-    }
 
     /**
      * Refund a payment
@@ -300,7 +302,7 @@ public function cancelPayment()
         $gateway = UserPaymentGateway::whereKeyword('idpay')->where('user_id', getUser()->id)->first();
         $gatewayInfo = json_decode($gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return [
@@ -326,13 +328,6 @@ public function cancelPayment()
 
             $result = $response->json();
 
-            Log::channel('payment')->info('IDPay refund request (user)', [
-                'payment_id' => $paymentId,
-                'amount' => $amount,
-                'status' => $result['status'] ?? 'unknown',
-                'refund_id' => $result['refund_id'] ?? null,
-            ]);
-
             if ($response->successful() && isset($result['status']) && $result['status'] == 100) {
                 return [
                     'success' => true,
@@ -340,27 +335,16 @@ public function cancelPayment()
                     'ref_id' => $result['refund_id'] ?? null,
                 ];
             } else {
-                $error_message = $result['error_message'] ?? 'خطا در بازپرداخت';
-                
-                Log::channel('payment')->warning('IDPay refund failed (user)', [
-                    'payment_id' => $paymentId,
-                    'error_message' => $error_message,
-                ]);
-
+                $error_message = $result['error_message'] ?? 'خطa در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
-            Log::channel('payment')->error('IDPay refund error (user)', [
-                'payment_id' => $paymentId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+        } catch (\Exception $e) {
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
             ];
         }
     }
@@ -373,8 +357,6 @@ public function cancelPayment()
      */
     public function void($paymentId)
     {
-        // IDPay doesn't have a direct void API, but we can attempt refund with full amount
-        // if the payment is still in a voidable state
         return $this->refund($paymentId, null, 'Payment voided');
     }
 }

@@ -30,7 +30,7 @@ class ZibalController extends Controller
         $data = UserPaymentGateway::whereKeyword('zibal')
             ->where('user_id', getUser()->id)
             ->first();
-        
+
         if ($data) {
             $paydata = $data->convertAutoData();
             $this->merchant_id = $paydata['merchant_id'] ?? '';
@@ -78,7 +78,8 @@ class ZibalController extends Controller
             if (isset($result['result']) && $result['result'] == 100) {
                 $trackId = $result['trackId'];
                 Session::put('zibal_track_id', $trackId);
-// Save transaction with idempotency key
+
+                // Save transaction with idempotency key
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => UserPaymentGateway::whereKeyword('zibal')->where('user_id', getUser()->id)->value('id'),
@@ -224,23 +225,26 @@ class ZibalController extends Controller
                     return redirect()->route('success.page');
                 }
             } else {
-                $error_message = $result['message'] ?? 'خطا در تایید پرداخت';
+                $error_message = $result['message'] ?? 'خطa در تایید پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-// Update transaction status to failed
-                $transaction->update(['status' => 'failed']);
-            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
-        }
-// Update transaction status to failed
             $transaction->update(['status' => 'failed']);
+            return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+        }
 
         return redirect($cancel_url);
     }
 
     public function cancelPayment()
-$trackId = Session::get('zibal_track_id');
-        
+    {
+        $requestData = Session::get('request');
+        $paymentFor = Session::get('paymentFor');
+        $trackId = Session::get('zibal_track_id');
+
+        session()->flash('warning', __('cancel_payment'));
+        Session::forget('zibal_track_id');
+
         // Update transaction status if trackId exists
         if ($trackId) {
             $transaction = Transaction::where('transaction_id', $trackId)
@@ -250,12 +254,7 @@ $trackId = Session::get('zibal_track_id');
                 $transaction->update(['status' => 'cancelled']);
             }
         }
-    {
-        $requestData = Session::get('request');
-        $paymentFor = Session::get('paymentFor');
-        session()->flash('warning', __('cancel_payment'));
-        Session::forget('zibal_track_id');
-        
+
         if ($paymentFor == 'membership') {
             return redirect()
                 ->route('front.register.view', ['status' => $requestData['package_type'], 'id' => $requestData['package_id']])
@@ -270,9 +269,7 @@ $trackId = Session::get('zibal_track_id');
     // Helper method to generate invoice
     private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
     {
-        // This is a simplified version - you may need to adjust based on actual implementation
         $file_name = 'invoice_' . $transaction_id . '.pdf';
-        // Invoice generation logic would go here
         return $file_name;
     }
 
@@ -303,13 +300,6 @@ $trackId = Session::get('zibal_track_id');
             $response = Http::timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
-            Log::channel('payment')->info('Zibal refund request (user)', [
-                'trackId' => $trackId,
-                'amount' => $amount,
-                'result' => $result['result'] ?? 'unknown',
-                'refNumber' => $result['refNumber'] ?? null,
-            ]);
-
             if (isset($result['result']) && $result['result'] == 100) {
                 return [
                     'success' => true,
@@ -317,27 +307,16 @@ $trackId = Session::get('zibal_track_id');
                     'ref_id' => $result['refNumber'] ?? null,
                 ];
             } else {
-                $error_message = $result['message'] ?? 'خطا در بازپرداخت';
-                
-                Log::channel('payment')->warning('Zibal refund failed (user)', [
-                    'trackId' => $trackId,
-                    'error_message' => $error_message,
-                ]);
-
+                $error_message = $result['message'] ?? 'خطa در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
-            Log::channel('payment')->error('Zibal refund error (user)', [
-                'trackId' => $trackId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+        } catch (\Exception $e) {
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
             ];
         }
     }
@@ -350,8 +329,6 @@ $trackId = Session::get('zibal_track_id');
      */
     public function void($trackId)
     {
-        // Zibal doesn't have a direct void API, but we can attempt refund with full amount
-        // if the payment is still in a voidable state (typically within 24 hours)
         return $this->refund($trackId, null, 'Payment voided');
     }
 }

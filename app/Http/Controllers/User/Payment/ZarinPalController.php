@@ -30,7 +30,7 @@ class ZarinPalController extends Controller
         $data = UserPaymentGateway::whereKeyword('zarinpal')
             ->where('user_id', getUser()->id)
             ->first();
-        
+
         if ($data) {
             $paydata = $data->convertAutoData();
             $this->merchant_id = $paydata['merchant_id'] ?? '';
@@ -58,7 +58,7 @@ class ZarinPalController extends Controller
         Session::put('zarinpal_order_id', $orderId);
 
         // Prepare data for ZarinPal API
-        $api_url = $this->sandbox_mode == 1 
+        $api_url = $this->sandbox_mode == 1
             ? 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
             : 'https://api.zarinpal.com/pg/v4/payment/request.json';
 
@@ -81,8 +81,8 @@ class ZarinPalController extends Controller
             if (isset($result['data']['code']) && $result['data']['code'] == 100) {
                 $authority = $result['data']['authority'];
                 Session::put('zarinpal_authority', $authority);
-                
-// Save transaction with idempotency key
+
+                // Save transaction with idempotency key
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => UserPaymentGateway::whereKeyword('zarinpal')->where('user_id', getUser()->id)->value('id'),
@@ -93,6 +93,7 @@ class ZarinPalController extends Controller
                     'currency' => 'IRR',
                     'ip' => $request->ip(),
                 ]);
+
                 $payment_url = $this->sandbox_mode == 1
                     ? 'https://sandbox.zarinpal.com/pg/StartPay/' . $authority
                     : 'https://www.zarinpal.com/pg/StartPay/' . $authority;
@@ -113,7 +114,7 @@ class ZarinPalController extends Controller
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
         $be = $currentLang->basic_extended;
         $bs = $currentLang->basic_setting;
-        
+
         $authority = $request->get('Authority');
         $status = $request->get('Status');
         $cancel_url = route('customer.appointment.zarinpal.cancel');
@@ -228,13 +229,11 @@ class ZarinPalController extends Controller
                     return redirect()->route('success.page');
                 }
             } else {
-// Update transaction status to failed
                 $transaction->update(['status' => 'failed']);
                 $error_message = $result['errors']['message'] ?? 'خطا در تایید پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-// Update transaction status to failed
             $transaction->update(['status' => 'failed']);
             return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
         }
@@ -243,8 +242,14 @@ class ZarinPalController extends Controller
     }
 
     public function cancelPayment()
-$authority = Session::get('zarinpal_authority');
-        
+    {
+        $requestData = Session::get('request');
+        $paymentFor = Session::get('paymentFor');
+        $authority = Session::get('zarinpal_authority');
+
+        session()->flash('warning', __('cancel_payment'));
+        Session::forget('zarinpal_authority');
+
         // Update transaction status if authority exists
         if ($authority) {
             $transaction = Transaction::where('transaction_id', $authority)
@@ -254,12 +259,7 @@ $authority = Session::get('zarinpal_authority');
                 $transaction->update(['status' => 'cancelled']);
             }
         }
-    {
-        $requestData = Session::get('request');
-        $paymentFor = Session::get('paymentFor');
-        session()->flash('warning', __('cancel_payment'));
-        Session::forget('zarinpal_authority');
-        
+
         if ($paymentFor == 'membership') {
             return redirect()
                 ->route('front.register.view', ['status' => $requestData['package_type'], 'id' => $requestData['package_id']])
@@ -274,9 +274,100 @@ $authority = Session::get('zarinpal_authority');
     // Helper method to generate invoice
     private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
     {
-        // This is a simplified version - you may need to adjust based on actual implementation
         $file_name = 'invoice_' . $transaction_id . '.pdf';
-        // Invoice generation logic would go here
         return $file_name;
+    }
+
+    /**
+     * Refund a payment
+     *
+     * @param string $authority The authority from original payment
+     * @param float|null $amount Amount to refund (null = full refund)
+     * @param string $reason Reason for refund
+     * @return array Result with success status and message
+     */
+    public function refund($authority, $amount = null, $reason = 'Refund requested')
+    {
+        $api_url = $this->sandbox_mode == 1
+            ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
+            : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
+
+        $payload = [
+            'merchant_id' => $this->merchant_id,
+            'authority' => $authority,
+        ];
+
+        if ($amount !== null) {
+            $payload['amount'] = $amount;
+        }
+
+        try {
+            $response = Http::timeout(30)->post($api_url, $payload);
+            $result = $response->json();
+
+            if (isset($result['data']['code']) && $result['data']['code'] == 100) {
+                return [
+                    'success' => true,
+                    'message' => 'بازپرداخت با موفقیت انجام شد.',
+                    'ref_id' => $result['data']['ref_id'] ?? null,
+                ];
+            } else {
+                $error_code = $result['data']['code'] ?? 0;
+                $error_messages = [
+                    -9 => 'خطای اعتبارسنجی داده‌ها',
+                    -10 => 'مرچنت کد یافت نشد',
+                    -11 => 'مرچنت غیرفعال است',
+                    -12 => 'مبلغ نامعتبر است',
+                    -13 => 'مبلغ کمتر از حداقل مجاز',
+                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
+                    -15 => 'تراکنش تکراری',
+                    -16 => 'خطای داخلی',
+                    -17 => 'IP مسدود شده',
+                    -18 => 'مرچنت تایید نشده',
+                    -19 => 'Callback URL نامعتبر',
+                    -20 => 'Description نامعتبر',
+                    -21 => 'موبایل نامعتبر',
+                    -22 => 'ایمیل نامعتبر',
+                    -30 => 'تراکنش یافت نشد',
+                    -31 => 'تراکنش تایید شده است',
+                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
+                    -33 => 'تراکنش انقضا یافته',
+                    -34 => 'تراکنش لغو شده',
+                    -35 => 'تراکنش نامعتبر',
+                    -36 => 'تراکنش تکراری',
+                    -40 => 'خطای سیستمی',
+                    -41 => 'مرچنت تایید نشده',
+                    -42 => 'تراکنش در انتظار تایید',
+                    -50 => 'خطای بانک',
+                    -51 => 'بانک در دسترس نیست',
+                    -52 => 'خطای شبکه',
+                    -53 => 'مبلغ کمتر از حداقل',
+                    -54 => 'مبلغ بیشتر از حداکثر',
+                    -60 => 'بازپرداخت امکان‌پذیر نیست',
+                    -61 => 'مبلغ بازپرداخت بیشتر از مبلغ تراکنش',
+                ];
+                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در بازپرداخت');
+                return [
+                    'success' => false,
+                    'message' => $error_message,
+                ];
+            }
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Void a payment (cancel before settlement)
+     *
+     * @param string $authority The authority from original payment
+     * @return array Result with success status and message
+     */
+    public function void($authority)
+    {
+        return $this->refund($authority, null, 'Payment voided');
     }
 }
