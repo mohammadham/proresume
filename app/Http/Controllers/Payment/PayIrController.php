@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Payment;
 
@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Models\Package;
 use Illuminate\Support\Str;
 
 class PayIrController extends Controller
@@ -24,7 +25,7 @@ class PayIrController extends Controller
     public function payment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:1000',
+            'package_id' => 'required|integer|exists:packages,id',
         ]);
 
         $amount = $request->amount;

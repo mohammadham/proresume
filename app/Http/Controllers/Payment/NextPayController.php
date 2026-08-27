@@ -1,14 +1,15 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Payment;
 
 use App\Http\Controllers\Controller;
 use App\Models\PaymentGateway;
 use App\Models\Transaction;
+use App\Models\Package;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Models\Package;
+use Illuminate\Support\Str;
 
 class NextPayController extends Controller
 {
@@ -24,17 +25,18 @@ class NextPayController extends Controller
     public function payment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:1000',
+            'package_id' => 'required|integer|exists:packages,id',
         ]);
 
-        $amount = $request->amount;
+        $package = Package::findOrFail($request->package_id);
+        $amount = (int) round($package->price);
         $orderId = 'NEXTPAY_' . Str::uuid()->toString();
         $callbackUrl = route('membership.nextpay.success');
 
         $user = auth()->user();
         $gatewayInfo = json_decode($this->gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return back()->with('error', 'درگاه NextPay تنظیم نشده است.');
@@ -49,13 +51,11 @@ class NextPayController extends Controller
             'payer_mobile' => $user->phone ?? '',
             'payer_email' => $user->email ?? '',
             'description' => 'پرداخت از طریق NextPay',
+            'currency' => 'IRT',
         ];
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://api.sandbox.nextpay.org/v1/payments/create' : $this->apiUrl, $data);
-
+            $response = Http::asForm()->timeout(30)->post($this->apiUrl, $data);
             $result = $response->json();
 
             Log::channel('payment')->info('NextPay payment initiation (admin)', [
@@ -66,11 +66,9 @@ class NextPayController extends Controller
                 'has_trans_id' => isset($result['trans_id']),
             ]);
 
-            if ($response->successful() && isset($result['code']) && $result['code'] == 0 && isset($result['trans_id'])) {
+            if ($response->successful() && isset($result['code']) && $result['code'] == -1 && isset($result['trans_id'])) {
                 $paymentId = $result['trans_id'];
-                $link = $result['payment_link'] ?? ($sandbox
-                    ? 'https://api.sandbox.nextpay.org/v1/payments/pay/' . $paymentId
-                    : 'https://api.nextpay.org/v1/payments/pay/' . $paymentId);
+                $link = 'https://nextpay.org/nx/gateway/payment/' . $paymentId;
 
                 // Save transaction with idempotency key
                 Transaction::create([
@@ -80,7 +78,7 @@ class NextPayController extends Controller
                     'transaction_id' => $paymentId,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => 'IRR',
+                    'currency' => 'IRT',
                     'ip' => $request->ip(),
                     'payment_url' => $link,
                 ]);
@@ -119,15 +117,15 @@ class NextPayController extends Controller
             // Payment successful, verify
             $gatewayInfo = json_decode($this->gateway->information, true);
             $apiKey = $gatewayInfo['api_key'] ?? '';
-            $sandbox = $gatewayInfo['sandbox'] ?? 0;
+            $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
             try {
-                $response = Http::timeout(30)->withHeaders([
-                    'Content-Type' => 'application/json',
-                ])->post($sandbox ? 'https://api.sandbox.nextpay.org/v1/payments/verify' : $this->verifyUrl, [
+                $response = Http::asForm()->timeout(30)->post($this->verifyUrl, [
                     'api_key' => $apiKey,
                     'trans_id' => $paymentId,
                     'order_id' => $transaction->order_id,
+                    'amount' => $transaction->amount,
+                    'currency' => 'IRT',
                 ]);
 
                 $result = $response->json();
@@ -193,11 +191,11 @@ class NextPayController extends Controller
      */
     public function refund($transId, $amount = null, $reason = 'Refund requested')
     {
-        $apiUrl = 'https://api.nextpay.org/v1/payments/refund';
+        $apiUrl = 'https://nextpay.org/nx/gateway/refund';
 
         $gatewayInfo = json_decode($this->gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
-        $sandbox = $gatewayInfo['sandbox'] ?? 0;
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
             return [
@@ -216,9 +214,7 @@ class NextPayController extends Controller
         }
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://api.sandbox.nextpay.org/v1/payments/refund' : $apiUrl, $payload);
+            $response = Http::asForm()->timeout(30)->post($apiUrl, $payload);
 
             $result = $response->json();
 
@@ -247,7 +243,7 @@ class NextPayController extends Controller
                     'message' => $error_message,
                 ];
             }
-        } catch (\\Exception $e) {
+        } catch (\Exception $e) {
             Log::channel('payment')->error('NextPay refund error (admin)', [
                 'trans_id' => $transId,
                 'error' => $e->getMessage(),

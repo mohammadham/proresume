@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Payment;
 
@@ -32,8 +32,8 @@ class ZarinPalController extends Controller
         if ($data) {
             $paydata = $data->convertAutoData();
             $this->merchant_id = $paydata['merchant_id'] ?? '';
-            $this->sandbox_mode = $paydata['sandbox_mode'] ?? 1;
             $this->description = $paydata['description'] ?? 'پرداخت اشتراک';
+            $this->sandbox_mode = $paydata['sandbox_status'] ?? 1;
             $this->callback_url = route('membership.zarinpal.success');
         }
     }
@@ -63,6 +63,7 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'amount' => $price, // Amount in Tomans
+            'currency' => 'IRT',
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
@@ -95,7 +96,7 @@ class ZarinPalController extends Controller
                     'transaction_id' => $authority,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => 'IRR',
+                    'currency' => 'IRT',
                     'ip' => $request->ip(),
                 ]);
 
@@ -176,6 +177,7 @@ class ZarinPalController extends Controller
                 'merchant_id' => $this->merchant_id,
                 'authority' => $authority,
                 'amount' => $transaction->amount,
+                'currency' => 'IRT',
             ];
 
             try {
@@ -391,6 +393,7 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'authority' => $authority,
+            'currency' => 'IRT',
         ];
 
         if ($amount !== null) {
@@ -488,3 +491,5 @@ class ZarinPalController extends Controller
         return $this->refund($authority, null, 'Payment voided');
     }
 }
+
+
