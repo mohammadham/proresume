@@ -308,7 +308,7 @@ class ZarinPalController extends Controller
                 $error_code = $result['data']['code'] ?? 0;
                 
                 // Update transaction status to failed
-                $transaction->update(['status' => 'failed']);
+                // $transaction->update(['status' => 'failed']);
                 
                 $error_messages = [
                     -9 => 'خطای اعتبارسنجی داده‌ها',
@@ -349,7 +349,7 @@ class ZarinPalController extends Controller
                     'error_message' => $error_message,
                 ]);
                 // Update transaction status to failed
-                $transaction->update(['status' => 'failed']);
+                // $transaction->update(['status' => 'failed']);
                 return redirect($cancel_url)->with('error', $error_message);
 
             }
@@ -416,6 +416,13 @@ class ZarinPalController extends Controller
      */
     public function refund($authority, $amount = null, $reason = 'Refund requested')
     {
+        // NOTE: ZarinPal V4 refund actually requires OAuth Bearer access token + session_id
+        // (not merchant_id + authority). This endpoint call will fail with the current signature.
+        // Until OAuth is wired up, throw so the UI does not silently pretend success.
+        throw new \RuntimeException('ZarinPal refund is not configured. Please contact support.');
+
+        // Unreachable — kept for future OAuth-based refund implementation.
+        // phpcs:disable
         $api_url = $this->sandbox_mode == 1
             ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
             : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
@@ -423,7 +430,7 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'authority' => $authority,
-            'currency' => $currency,
+            // 'currency' => $currency,
         ];
 
         if ($amount !== null) {

@@ -50,10 +50,12 @@ class NextPayController extends Controller
         }
 
         $orderId = 'NEXTPAY_' . Str::uuid()->toString();
-        $callbackUrl = route('membership.nextpay.success');
+        $gatewayInfo = json_decode($this->gateway->information, true);
+        $callbackUrl = !empty($gatewayInfo['callback_url'] ?? null)
+            ? $gatewayInfo['callback_url']
+            : route('membership.nextpay.success');
 
         $user = auth()->user();
-        $gatewayInfo = json_decode($this->gateway->information, true);
         $apiKey = $gatewayInfo['api_key'] ?? '';
         $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 

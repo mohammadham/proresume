@@ -11,11 +11,22 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Package;
 use Illuminate\Support\Str;
 
+/**
+ * Pay.ir Payment Gateway (API v2 — token based).
+ *
+ * Docs: https://github.com/aminsaedi/payir-v2
+ * - Send:     POST https://pay.ir/pg/send
+ * - Redirect: https://pay.ir/pg/{token}
+ * - Verify:   POST https://pay.ir/pg/verify   (body: {api, token})
+ * - Callback: POST with fields "token" and "status"
+ */
 class PayIrController extends Controller
 {
     protected $gateway;
-    protected $apiUrl = 'https://pay.ir/payment/send';
-    protected $verifyUrl = 'https://pay.ir/payment/verify';
+    protected $apiUrl        = 'https://pay.ir/pg/send';
+    protected $verifyUrl     = 'https://pay.ir/pg/verify';
+    protected $sandboxSend   = 'https://pay.ir/pg/sandbox/send';
+    protected $sandboxVerify = 'https://pay.ir/pg/sandbox/verify';
 
     public function __construct()
     {
@@ -30,7 +41,7 @@ class PayIrController extends Controller
 
         $package = Package::findOrFail($request->package_id);
 
-        // Detect base currency (P1-2). Pay.ir requires Rial (IRR).
+        // P1-2: Base currency check. Pay.ir requires Rial (IRR).
         $currentLang = session()->has('lang')
             ? \App\Models\Language::where('code', session()->get('lang'))->first()
             : \App\Models\Language::where('is_default', 1)->first();
@@ -42,75 +53,82 @@ class PayIrController extends Controller
         // Convert Toman → Rial if needed
         $amount = (int) round($baseCurrency === 'IRT' ? $package->price * 10 : $package->price);
 
-        // Min amount check for Pay.ir: 10,000 Rial (P1-3)
+        // P1-3: Min amount check for Pay.ir: 10,000 Rial
         if ($amount < 10000) {
             return back()->with('error', 'حداقل مبلغ قابل پرداخت ۱۰،۰۰۰ ریال است.');
         }
 
         $orderId = 'PAYIR_' . Str::uuid()->toString();
-        $callbackUrl = route('membership.payir.success');
-
         $user = auth()->user();
         $gatewayInfo = json_decode($this->gateway->information, true);
-        $apiKey = $gatewayInfo['api_key'] ?? '';
+        $apiKey  = $gatewayInfo['api_key'] ?? '';
         $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
+
+        // P1-7: honor admin-configured callback_url when present
+        $callbackUrl = !empty($gatewayInfo['callback_url'] ?? null)
+            ? $gatewayInfo['callback_url']
+            : route('membership.payir.success');
 
         if (!$apiKey) {
             return back()->with('error', 'درگاه Pay.ir تنظیم نشده است.');
         }
 
+        // Pay.ir v2 send payload
         $data = [
-            'api' => $apiKey,
-            'amount' => $amount,
-            'redirect' => $callbackUrl,
-            'mobile' => $user->phone ?? '',
+            'api'          => $apiKey,
+            'amount'       => $amount,
+            'redirect'     => $callbackUrl,
+            'mobile'       => $user->phone ?? '',
             'factorNumber' => $orderId,
-            'description' => 'پرداخت از طریق Pay.ir',
+            'description'  => 'پرداخت از طریق Pay.ir',
         ];
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://pay.ir/payment/sandbox/send' : $this->apiUrl, $data);
+            $endpoint = $sandbox ? $this->sandboxSend : $this->apiUrl;
+            $response = Http::timeout(30)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($endpoint, $data);
 
             $result = $response->json();
 
-            Log::channel('payment')->info('Pay.ir payment initiation (admin)', [
-                'order_id' => $orderId,
-                'amount' => $amount,
+            Log::channel('payment')->info('Pay.ir payment initiation (admin, v2)', [
+                'order_id'       => $orderId,
+                'amount'         => $amount,
                 'sandbox_status' => $sandbox,
-                'status' => $result['status'] ?? 'unknown',
-                'has_trans_id' => isset($result['transId']),
+                'status'         => $result['status'] ?? 'unknown',
+                'has_token'      => isset($result['token']),
             ]);
 
-            if ($response->successful() && isset($result['status']) && $result['status'] == 1 && isset($result['transId'])) {
-                $paymentId = $result['transId'];
-                $link = $sandbox
-                    ? 'https://pay.ir/payment/sandbox/' . $paymentId
-                    : 'https://pay.ir/payment/' . $paymentId;
+            // v2 success: status == 1 AND token present
+            if ($response->successful() && isset($result['status']) && $result['status'] == 1 && !empty($result['token'])) {
+                $token = $result['token'];
+                $link  = ($sandbox ? 'https://pay.ir/pg/sandbox/' : 'https://pay.ir/pg/') . $token;
 
-                // Save transaction with idempotency key
                 Transaction::create([
-                    'user_id' => $user->id ?? null,
-                    'gateway_id' => $this->gateway->id,
-                    'amount' => $amount,
-                    'transaction_id' => $paymentId,
-                    'order_id' => $orderId,
-                    'status' => 'pending',
-                    'currency' => 'IRR',
-                    'ip' => $request->ip(),
-                    'payment_url' => $link,
+                    'user_id'        => $user->id ?? null,
+                    'gateway_id'     => $this->gateway->id,
+                    'amount'         => $amount,
+                    'transaction_id' => $token,
+                    'order_id'       => $orderId,
+                    'status'         => 'pending',
+                    'currency'       => 'IRR',
+                    'ip'             => $request->ip(),
+                    'payment_url'    => $link,
                 ]);
 
                 return redirect($link);
-            } else {
-                $error = $result['errorMessage'] ?? $result['status'] ?? 'خطا در ارتباط با درگاه';
-                return back()->with('error', $error);
             }
-        } catch (\Exception $e) {
-            Log::channel('payment')->error('Pay.ir payment initiation error (admin)', [
+
+            $error = $result['errorMessage'] ?? $result['errorCode'] ?? 'خطا در ارتباط با درگاه';
+            Log::channel('payment')->warning('Pay.ir send failed (admin, v2)', [
                 'order_id' => $orderId,
-                'error' => $e->getMessage(),
+                'error'    => $error,
+            ]);
+            return back()->with('error', 'خطا در اتصال به درگاه پرداخت.');
+        } catch (\Exception $e) {
+            Log::channel('payment')->error('Pay.ir payment initiation error (admin, v2)', [
+                'order_id' => $orderId,
+                'error'    => $e->getMessage(),
             ]);
             return back()->with('error', 'خطا در پرداخت. لطفاً بعداً تلاش کنید.');
         }
@@ -118,13 +136,19 @@ class PayIrController extends Controller
 
     public function success(Request $request)
     {
-        $paymentId = $request->input('transId');
+        // Pay.ir v2 sends "token" (not transId) via POST
+        $token  = $request->input('token');
         $status = $request->input('status');
 
-        // Idempotency: lock the row and check it's still pending (P1-5)
+        if (!$token) {
+            Log::channel('payment')->warning('Pay.ir callback: missing token');
+            return redirect()->route('user.gateways')->with('error', 'اطلاعات پرداخت ناقص است.');
+        }
+
+        // P1-5: Idempotency — lockForUpdate + status check
         try {
-            $transaction = DB::transaction(function () use ($paymentId) {
-                $t = Transaction::where('transaction_id', $paymentId)
+            $transaction = DB::transaction(function () use ($token) {
+                $t = Transaction::where('transaction_id', $token)
                     ->where('gateway_id', $this->gateway->id)
                     ->lockForUpdate()
                     ->first();
@@ -140,31 +164,31 @@ class PayIrController extends Controller
         } catch (\DomainException $e) {
             $msg = $e->getMessage();
             if ($msg === 'TRANSACTION_NOT_FOUND') {
-                Log::channel('payment')->warning('Pay.ir callback: transaction not found', ['payment_id' => $paymentId]);
+                Log::channel('payment')->warning('Pay.ir callback: transaction not found', ['token' => $token]);
                 return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
             }
-            Log::channel('payment')->info('Pay.ir callback: duplicate/already processed', ['payment_id' => $paymentId, 'state' => $msg]);
+            Log::channel('payment')->info('Pay.ir callback: duplicate/already processed', ['token' => $token, 'state' => $msg]);
             return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '1' || $status == 1) {
-            // Payment successful, verify
             $gatewayInfo = json_decode($this->gateway->information, true);
-            $apiKey = $gatewayInfo['api_key'] ?? '';
+            $apiKey  = $gatewayInfo['api_key'] ?? '';
             $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
             try {
-                $response = Http::timeout(30)->withHeaders([
-                    'Content-Type' => 'application/json',
-                ])->post($sandbox ? 'https://pay.ir/payment/sandbox/verify' : $this->verifyUrl, [
-                    'api' => $apiKey,
-                    'transId' => $paymentId,
-                ]);
+                $endpoint = $sandbox ? $this->sandboxVerify : $this->verifyUrl;
+                $response = Http::timeout(30)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->post($endpoint, [
+                        'api'   => $apiKey,
+                        'token' => $token,
+                    ]);
 
                 $result = $response->json();
 
-                Log::channel('payment')->info('Pay.ir payment verification (admin)', [
-                    'trans_id' => $paymentId,
+                Log::channel('payment')->info('Pay.ir verification (admin, v2)', [
+                    'token'  => $token,
                     'status' => $result['status'] ?? 'unknown',
                     'amount' => $result['amount'] ?? null,
                 ]);
@@ -175,52 +199,56 @@ class PayIrController extends Controller
                     $expectedAmount = (int) $transaction->amount;
                     if ($verifiedAmount !== null && $verifiedAmount !== $expectedAmount) {
                         $transaction->update(['status' => 'failed']);
-                        Log::channel('payment')->warning('Pay.ir amount mismatch (admin)', [
-                            'trans_id' => $paymentId,
-                            'verified_amount' => $verifiedAmount,
-                            'expected_amount' => $expectedAmount,
+                        Log::channel('payment')->warning('Pay.ir amount mismatch (admin, v2)', [
+                            'token'    => $token,
+                            'verified' => $verifiedAmount,
+                            'expected' => $expectedAmount,
                         ]);
                         return redirect()->route('user.gateways')
                             ->with('error', 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.');
                     }
 
                     $transaction->update([
-                        'status' => 'success',
-                        'tracking_code' => $paymentId,
+                        'status'        => 'success',
+                        'tracking_code' => $result['transId'] ?? $token,
                     ]);
 
                     return redirect()->route('user.gateways')
-                        ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . $paymentId);
-                } else {
-                    $transaction->update(['status' => 'failed']);
-                    $error_message = $result['errorMessage'] ?? 'پرداخت تایید نشد.';
-                    return redirect()->route('user.gateways')
-                        ->with('error', $error_message);
+                        ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . ($result['transId'] ?? $token));
                 }
+
+                $transaction->update(['status' => 'failed']);
+                Log::channel('payment')->warning('Pay.ir verify failed (admin, v2)', [
+                    'token'  => $token,
+                    'result' => $result,
+                ]);
+                return redirect()->route('user.gateways')->with('error', 'پرداخت تایید نشد.');
             } catch (\Exception $e) {
                 $transaction->update(['status' => 'failed']);
-                Log::channel('payment')->error('Pay.ir payment verification error (admin)', [
-                    'trans_id' => $paymentId,
+                Log::channel('payment')->error('Pay.ir verification error (admin, v2)', [
+                    'token' => $token,
                     'error' => $e->getMessage(),
                 ]);
                 return redirect()->route('user.gateways')
                     ->with('error', 'خطا در تایید پرداخت. لطفاً با پشتیبانی تماس بگیرید.');
             }
-        } else {
-            $error_messages = [
-                '0' => 'پرداخت ناموفق بود.',
-                '-1' => 'مبلغ کمتر از حداقل مجاز است.',
-                '-2' => 'مبلغ بیشتر از حداکثر مجاز است.',
-                '-3' => 'IP مسدود شده است.',
-                '-4' => 'تراکنش تکراری است.',
-                '-5' => 'اطلاعات ارسال شده نامعتبر است.',
-                '-6' => 'درگاه غیر فعال است.',
-                '-7' => 'پرداخت لغو شده توسط کاربر.',
-                '-8' => 'خطای داخلی سیستم.',
-            ];
-            $error = $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status;
-            return redirect()->route('user.gateways')->with('error', $error);
         }
+
+        // Non-success status codes
+        $transaction->update(['status' => 'failed']);
+        $error_messages = [
+            '0'  => 'پرداخت ناموفق بود.',
+            '-1' => 'مبلغ کمتر از حداقل مجاز است.',
+            '-2' => 'مبلغ بیشتر از حداکثر مجاز است.',
+            '-3' => 'IP مسدود شده است.',
+            '-4' => 'تراکنش تکراری است.',
+            '-5' => 'اطلاعات ارسال شده نامعتبر است.',
+            '-6' => 'درگاه غیر فعال است.',
+            '-7' => 'پرداخت لغو شده توسط کاربر.',
+            '-8' => 'خطای داخلی سیستم.',
+        ];
+        $error = $error_messages[$status] ?? ('پرداخت ناموفق بود. کد وضعیت: ' . $status);
+        return redirect()->route('user.gateways')->with('error', $error);
     }
 
     public function cancel(Request $request)
@@ -229,46 +257,36 @@ class PayIrController extends Controller
     }
 
     /**
-     * Refund a payment
-     *
-     * @param string $transId The transId from original payment
-     * @param float|null $amount Amount to refund (null = full refund)
-     * @param string $reason Reason for refund
-     * @return array Result with success status and message
+     * Refund a payment (Pay.ir v2)
+     * Note: Pay.ir refund API is limited and may require merchant-side settlement setup.
      */
-    public function refund($transId, $amount = null, $reason = 'Refund requested')
+    public function refund($token, $amount = null, $reason = 'Refund requested')
     {
-        $apiUrl = 'https://pay.ir/payment/refund';
+        $apiUrl = 'https://pay.ir/pg/refund';
 
         $gatewayInfo = json_decode($this->gateway->information, true);
-        $apiKey = $gatewayInfo['api_key'] ?? '';
+        $apiKey  = $gatewayInfo['api_key'] ?? '';
         $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
         if (!$apiKey) {
-            return [
-                'success' => false,
-                'message' => 'درگاه Pay.ir تنظیم نشده است.',
-            ];
+            return ['success' => false, 'message' => 'درگاه Pay.ir تنظیم نشده است.'];
         }
 
-        $payload = [
-            'api' => $apiKey,
-            'transId' => $transId,
-        ];
-
+        $payload = ['api' => $apiKey, 'token' => $token];
         if ($amount !== null) {
             $payload['amount'] = $amount;
         }
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://pay.ir/payment/sandbox/refund' : $apiUrl, $payload);
+            $endpoint = $sandbox ? 'https://pay.ir/pg/sandbox/refund' : $apiUrl;
+            $response = Http::timeout(30)
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->post($endpoint, $payload);
 
             $result = $response->json();
 
-            Log::channel('payment')->info('Pay.ir refund request (admin)', [
-                'trans_id' => $transId,
+            Log::channel('payment')->info('Pay.ir refund request (admin, v2)', [
+                'token'  => $token,
                 'amount' => $amount,
                 'status' => $result['status'] ?? 'unknown',
             ]);
@@ -277,44 +295,31 @@ class PayIrController extends Controller
                 return [
                     'success' => true,
                     'message' => 'بازپرداخت با موفقیت انجام شد.',
-                    'ref_id' => $transId,
-                ];
-            } else {
-                $error_message = $result['errorMessage'] ?? 'خطا در بازپرداخت';
-                
-                Log::channel('payment')->warning('Pay.ir refund failed (admin)', [
-                    'trans_id' => $transId,
-                    'error_message' => $error_message,
-                ]);
-
-                return [
-                    'success' => false,
-                    'message' => $error_message,
+                    'ref_id'  => $token,
                 ];
             }
+
+            $error_message = $result['errorMessage'] ?? 'خطا در بازپرداخت';
+            Log::channel('payment')->warning('Pay.ir refund failed (admin, v2)', [
+                'token'         => $token,
+                'error_message' => $error_message,
+            ]);
+            return ['success' => false, 'message' => $error_message];
         } catch (\Exception $e) {
-            Log::channel('payment')->error('Pay.ir refund error (admin)', [
-                'trans_id' => $transId,
+            Log::channel('payment')->error('Pay.ir refund error (admin, v2)', [
+                'token' => $token,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return [
-                'success' => false,
-                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
-            ];
+            return ['success' => false, 'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.'];
         }
     }
 
     /**
-     * Void a payment (cancel before settlement)
-     *
-     * @param string $transId The transId from original payment
-     * @return array Result with success status and message
+     * Void a payment (best-effort — Pay.ir has no dedicated void API).
      */
-    public function void($transId)
+    public function void($token)
     {
-        // Pay.ir doesn't have a direct void API, but we can attempt refund with full amount
-        // if the payment is still in a voidable state
-        return $this->refund($transId, null, 'Payment voided');
+        return $this->refund($token, null, 'Payment voided');
     }
 }
