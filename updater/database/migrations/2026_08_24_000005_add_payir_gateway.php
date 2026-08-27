@@ -1,43 +1,30 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        // Check if the gateway already exists
-        $gateway = \App\Models\PaymentGateway::where('keyword', 'payir')->first();
-        
-        if (!$gateway) {
-            \App\Models\PaymentGateway::create([
-                'name' => 'Pay.ir',
-                'keyword' => 'payir',
-                'status' => 0,
+        \DB::table('payment_gateways')->updateOrInsert(
+            ['keyword' => 'payir'],
+            [
+                'name'        => 'Pay.ir',
+                'title'       => 'Pay.ir',
+                'subtitle'    => 'پرداخت با Pay.ir',
+                'details'     => 'Pay.ir Payment Gateway',
+                'type'        => 'automatic',
                 'information' => json_encode([
-                    'api_key' => '',
-                    'sandbox' => 0,
-                ]),
-                'supported_currencies' => '["IRR"]',
-                'description' => 'Pay.ir Payment Gateway',
-                'image' => 'payir.png',
-                'is_manual' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+                    'api_key'        => '',
+                    'sandbox_status' => 1,
+                ], JSON_UNESCAPED_UNICODE),
+                'status' => 0,
+            ]
+        );
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        \App\Models\PaymentGateway::where('keyword', 'payir')->delete();
+        \DB::table('payment_gateways')->where('keyword', 'payir')->delete();
     }
 };

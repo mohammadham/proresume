@@ -228,11 +228,18 @@ class ZibalController extends Controller
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-// Update transaction status to failed
-            $transaction->update(['status' => 'failed']);
-            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+            // Update transaction status to failed (if resolved)
+            if (isset($transaction) && $transaction) {
+                $transaction->update(['status' => 'failed']);
+            }
+            Log::channel('payment')->error('Zibal payment verification error (admin)', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
         }
-return redirect($cancel_url);
+
+        return redirect($cancel_url);
     }
 
     public function cancelPayment()

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PaymentGateway extends Model
 {
-    protected $fillable = ['title', 'details', 'subtitle', 'name', 'type', 'information'];
+        protected $fillable = ['title', 'details', 'subtitle', 'name', 'type', 'information', 'keyword', 'status'];
     public $timestamps = false;
 
     public function convertAutoData(){

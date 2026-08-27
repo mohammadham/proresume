@@ -36,8 +36,10 @@ class GatewayController extends Controller
         $data['xendit'] = PaymentGateway::where('keyword', 'xendit')->first();
         $data['yoco'] = PaymentGateway::where('keyword', 'yoco')->first();
         $data['perfect_money'] = PaymentGateway::where('keyword', 'perfect_money')->first();
-        $data['zarinpal'] = PaymentGateway::where('keyword', 'zarinpal')->first();
-
+        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir'] as $kw) {
+            $data[$kw] = PaymentGateway::where('keyword', $kw)->first();
+        }
+        
         return view('admin.gateways.index', $data);
     }
 

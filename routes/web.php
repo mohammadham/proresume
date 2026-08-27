@@ -1016,24 +1016,24 @@ Route::domain($domain)->group(function () {
             Route::get('perfect_money/cancel', 'Payment\PerfectMoneyController@cancelPayment')->name('membership.perfect_money.cancel');
 
             // ZarinPal routes
-            Route::get('zarinpal/success', 'Payment\ZarinPalController@successPayment')->name('membership.zarinpal.success');
+            Route::match(['get','post'], 'zarinpal/success', 'Payment\ZarinPalController@successPayment')->name('membership.zarinpal.success');
             Route::get('zarinpal/cancel', 'Payment\ZarinPalController@cancelPayment')->name('membership.zarinpal.cancel');
 
             // Zibal routes
-            Route::get('zibal/success', 'Payment\ZibalController@successPayment')->name('membership.zibal.success');
+            Route::match(['get','post'], 'zibal/success', 'Payment\ZibalController@successPayment')->name('membership.zibal.success');
             Route::get('zibal/cancel', 'Payment\ZibalController@cancelPayment')->name('membership.zibal.cancel');
 
-            // IDPay routes
-            Route::get('idpay/success', 'User\Payment\IdPayController@successPayment')->name('membership.idpay.success');
-            Route::get('idpay/cancel', 'User\Payment\IdPayController@cancelPayment')->name('membership.idpay.cancel');
+            // IDPay routes (callback is POST per official docs)
+            Route::match(['get','post'], 'idpay/success', 'Payment\IdPayController@success')->name('membership.idpay.success');
+            Route::get('idpay/cancel', 'Payment\IdPayController@cancel')->name('membership.idpay.cancel');
 
-            // NextPay routes
-            Route::get('nextpay/success', 'User\Payment\NextPayController@successPayment')->name('membership.nextpay.success');
-            Route::get('nextpay/cancel', 'User\Payment\NextPayController@cancelPayment')->name('membership.nextpay.cancel');
+            // NextPay routes (callback is POST per official docs)
+            Route::match(['get','post'], 'nextpay/success', 'Payment\NextPayController@success')->name('membership.nextpay.success');
+            Route::get('nextpay/cancel', 'Payment\NextPayController@cancel')->name('membership.nextpay.cancel');
 
-            // Pay.ir routes
-            Route::get('payir/success', 'User\Payment\PayIrController@successPayment')->name('membership.payir.success');
-            Route::get('payir/cancel', 'User\Payment\PayIrController@cancelPayment')->name('membership.payir.cancel');
+            // Pay.ir routes (callback is POST per official docs)
+            Route::match(['get','post'], 'payir/success', 'Payment\PayIrController@success')->name('membership.payir.success');
+            Route::get('payir/cancel', 'Payment\PayIrController@cancel')->name('membership.payir.cancel');
         });
     });
 });

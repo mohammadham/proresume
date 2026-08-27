@@ -95,7 +95,12 @@ return [
             'driver' => 'monolog',
             'handler' => NullHandler::class,
         ],
-
+        'payment' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/payment.log'),
+            'level'  => 'debug',
+            'days'   => 30,
+        ],
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

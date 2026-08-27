@@ -312,10 +312,10 @@ class ZarinPalController extends Controller
                     'error_code' => $error_code,
                     'error_message' => $error_message,
                 ]);
-
+                // Update transaction status to failed
+                $transaction->update(['status' => 'failed']);
                 return redirect($cancel_url)->with('error', $error_message);
-// Update transaction status to failed
-            $transaction->update(['status' => 'failed']);
+
             }
         } catch (\Exception $e) {
             Log::channel('payment')->error('ZarinPal payment verification error (admin)', [
@@ -323,7 +323,8 @@ class ZarinPalController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
+        
         }
     } else {
         $error_message = ($status == 'NOK') ? 'پرداخت توسط کاربر لغو شد یا ناموفق بود.' : 'پرداخت ناموفق بود.';

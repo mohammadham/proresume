@@ -37,8 +37,10 @@ class GatewayController extends Controller
         $data['yoco'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'yoco')->first();
         $data['myfatoorah'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'myfatoorah')->first();
         $data['xendit'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'xendit')->first();
-        $data['zarinpal'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'zarinpal')->first();
-
+        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir'] as $kw) {
+            $data[$kw] = UserPaymentGateway::where('user_id', $userId)->where('keyword', $kw)->first();
+        }
+        
         return view('user.gateways.index', $data);
     }
 
