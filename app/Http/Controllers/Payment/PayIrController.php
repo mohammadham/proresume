@@ -117,7 +117,7 @@ class PayIrController extends Controller
             // Payment successful, verify
             $gatewayInfo = json_decode($this->gateway->information, true);
             $apiKey = $gatewayInfo['api_key'] ?? '';
-            $sandbox = $gatewayInfo['sandbox'] ?? 0;
+            $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
             try {
                 $response = Http::timeout(30)->withHeaders([
@@ -252,7 +252,8 @@ class PayIrController extends Controller
             ]);
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت: ' . $e->getMessage()
+// TEST_MARKER_FOR_EXCEPTION_FIX,
             ];
         }
     }
