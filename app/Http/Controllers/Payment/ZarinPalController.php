@@ -35,7 +35,10 @@ class ZarinPalController extends Controller
             $this->merchant_id = $paydata['merchant_id'] ?? '';
             $this->description = $paydata['description'] ?? 'پرداخت اشتراک';
             $this->sandbox_mode = $paydata['sandbox_status'] ?? 1;
-            $this->callback_url = route('membership.zarinpal.success');
+            // P1-8: honor admin-configured callback_url when present, fallback to route
+            $this->callback_url = !empty($paydata['callback_url'])
+                ? $paydata['callback_url']
+                : route('membership.zarinpal.success');
         }
     }
 
@@ -43,9 +46,27 @@ class ZarinPalController extends Controller
     {
         $title = $_title;
         $price = $_amount;
-        $price = round($price);
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
+
+        // P1-2: Base currency check. ZarinPal accepts both IRR and IRT natively.
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRT');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        // ZarinPal supports IRT natively; if base is IRR, keep as IRR (send currency=IRR).
+        $price = (int) round($price);
+        $currency = $baseCurrency;
+
+        // P1-3: Min amount check for ZarinPal (1,000 Rial = 100 Toman)
+        $minAmount = $currency === 'IRT' ? 100 : 1000;
+        if ($price < $minAmount) {
+            return redirect($cancel_url)->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
+        }
 
         // Generate unique order ID for idempotency
         $orderId = 'ZARINPAL_' . Str::uuid()->toString();
@@ -63,8 +84,8 @@ class ZarinPalController extends Controller
 
         $payload = [
             'merchant_id' => $this->merchant_id,
-            'amount' => $price, // Amount in Tomans
-            'currency' => 'IRT',
+            'amount' => $price,
+            'currency' => $currency,
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
@@ -97,7 +118,7 @@ class ZarinPalController extends Controller
                     'transaction_id' => $authority,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => 'IRT',
+                    'currency' => $currency,
                     'ip' => $request->ip(),
                 ]);
 
@@ -140,7 +161,7 @@ class ZarinPalController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت.');
         } 
     }
 
@@ -156,16 +177,30 @@ class ZarinPalController extends Controller
 
         $cancel_url = route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1]);
 
-        // Find transaction by authority (stored as transaction_id)
-        $transaction = Transaction::where('transaction_id', $authority)
-            ->whereHas('gateway', function($q) { $q->where('keyword', 'zarinpal'); })
-            ->first();
-
-        if (!$transaction) {
-            Log::channel('payment')->warning('ZarinPal callback: transaction not found', [
-                'authority' => $authority,
-            ]);
-            return redirect($cancel_url)->with('error', 'تراکنش یافت نشد. لطفاً مجدداً تلاش کنید.');
+        // P1-5: Idempotency — lock the row and check it's still pending
+        try {
+            $transaction = DB::transaction(function () use ($authority) {
+                $t = Transaction::where('transaction_id', $authority)
+                    ->whereHas('gateway', function ($q) { $q->where('keyword', 'zarinpal'); })
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('ZarinPal callback: transaction not found', ['authority' => $authority]);
+                return redirect($cancel_url)->with('error', 'تراکنش یافت نشد. لطفاً مجدداً تلاش کنید.');
+            }
+            Log::channel('payment')->info('ZarinPal callback: duplicate/already processed', ['authority' => $authority, 'state' => $msg]);
+            return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == 'OK' && $authority) {
@@ -178,7 +213,7 @@ class ZarinPalController extends Controller
                 'merchant_id' => $this->merchant_id,
                 'authority' => $authority,
                 'amount' => $transaction->amount,
-                'currency' => 'IRT',
+                'currency' => $transaction->currency ?? 'IRT',
             ];
 
             try {
@@ -369,14 +404,7 @@ class ZarinPalController extends Controller
         }
     }
 
-    // Helper method to generate invoice (copied from PaypalController)
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        // This is a simplified version - you may need to adjust based on actual implementation
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        // Invoice generation logic would go here
-        return $file_name;
-    }
+    // Note: makeInvoice() is inherited from App\Http\Controllers\Controller (real implementation)
 
     /**
      * Refund a payment
@@ -395,7 +423,7 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'authority' => $authority,
-            'currency' => 'IRT',
+            'currency' => $currency,
         ];
 
         if ($amount !== null) {
@@ -475,7 +503,7 @@ class ZarinPalController extends Controller
             ]);
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }

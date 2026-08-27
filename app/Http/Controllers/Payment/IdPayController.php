@@ -114,7 +114,7 @@ class IdPayController extends Controller
                 'order_id' => $orderId,
                 'error' => $e->getMessage(),
             ]);
-            return back()->with('error', 'خطا در پرداخت: ' . $e->getMessage());
+             return back()->with('error', 'خطا در پرداخت. لطفاً مجدداً تلاش کنید.');
         }
     
     }
@@ -303,7 +303,7 @@ class IdPayController extends Controller
             ]);
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
