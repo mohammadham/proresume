@@ -7,6 +7,7 @@ use App\Models\PaymentGateway;
 use App\Models\Transaction;
 use App\Models\Package;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -29,7 +30,25 @@ class NextPayController extends Controller
         ]);
 
         $package = Package::findOrFail($request->package_id);
+
+        // Detect base currency (P1-2). NextPay accepts both IRR and IRT natively.
+        $currentLang = session()->has('lang')
+            ? \App\Models\Language::where('code', session()->get('lang'))->first()
+            : \App\Models\Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRT');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return back()->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
         $amount = (int) round($package->price);
+        $currency = $baseCurrency;
+
+        // Min amount check for NextPay: 1,000 Rial or 100 Toman (P1-3)
+        $minAmount = $currency === 'IRT' ? 100 : 1000;
+        if ($amount < $minAmount) {
+            return back()->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
+        }
+
         $orderId = 'NEXTPAY_' . Str::uuid()->toString();
         $callbackUrl = route('membership.nextpay.success');
 
@@ -51,7 +70,7 @@ class NextPayController extends Controller
             'payer_mobile' => $user->phone ?? '',
             'payer_email' => $user->email ?? '',
             'description' => 'پرداخت از طریق NextPay',
-            'currency' => 'IRT',
+            'currency' => $currency,
         ];
 
         try {
@@ -78,7 +97,7 @@ class NextPayController extends Controller
                     'transaction_id' => $paymentId,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => 'IRT',
+                    'currency' => $currency,
                     'ip' => $request->ip(),
                     'payment_url' => $link,
                 ]);
@@ -102,15 +121,30 @@ class NextPayController extends Controller
         $paymentId = $request->input('trans_id');
         $status = $request->input('status');
 
-        $transaction = Transaction::where('transaction_id', $paymentId)
-            ->where('gateway_id', $this->gateway->id)
-            ->first();
-
-        if (!$transaction) {
-            Log::channel('payment')->warning('NextPay callback: transaction not found', [
-                'payment_id' => $paymentId,
-            ]);
-            return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+        // Idempotency: lock the row and check it's still pending (P1-5)
+        try {
+            $transaction = DB::transaction(function () use ($paymentId) {
+                $t = Transaction::where('transaction_id', $paymentId)
+                    ->where('gateway_id', $this->gateway->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('NextPay callback: transaction not found', ['payment_id' => $paymentId]);
+                return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+            }
+            Log::channel('payment')->info('NextPay callback: duplicate/already processed', ['payment_id' => $paymentId, 'state' => $msg]);
+            return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '0') {
@@ -125,7 +159,7 @@ class NextPayController extends Controller
                     'trans_id' => $paymentId,
                     'order_id' => $transaction->order_id,
                     'amount' => $transaction->amount,
-                    'currency' => 'IRT',
+                    'currency' => $transaction->currency ?? 'IRT',
                 ]);
 
                 $result = $response->json();
@@ -137,7 +171,8 @@ class NextPayController extends Controller
                     'amount' => $result['amount'] ?? null,
                 ]);
 
-                if ($response->successful() && isset($result['code']) && $result['code'] == 0) {
+                $amountOk = !isset($result['amount']) || (int) $result['amount'] === (int) $transaction->amount;
+                if ($response->successful() && isset($result['code']) && $result['code'] == 0 && $amountOk) {
                     $transaction->update([
                         'status' => 'success',
                         'tracking_code' => $paymentId,
@@ -147,7 +182,9 @@ class NextPayController extends Controller
                         ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . $paymentId);
                 } else {
                     $transaction->update(['status' => 'failed']);
-                    $error_message = $result['message'] ?? 'پرداخت تایید نشد.';
+                    $error_message = !$amountOk
+                        ? 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.'
+                        : ($result['message'] ?? 'پرداخت تایید نشد.');
                     return redirect()->route('user.gateways')
                         ->with('error', $error_message);
                 }
@@ -158,9 +195,10 @@ class NextPayController extends Controller
                     'error' => $e->getMessage(),
                 ]);
                 return redirect()->route('user.gateways')
-                    ->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+                    ->with('error', 'خطا در تایید پرداخت. لطفاً مجدداً تلاش کنید.');
             }
         } else {
+            $transaction->update(['status' => 'failed']);
             $error_messages = [
                 '1' => 'مبلغ کمتر از حداقل مجاز است.',
                 '2' => 'مبلغ بیشتر از حداکثر مجاز است.',

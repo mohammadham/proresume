@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PaymentGateway;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -29,8 +30,24 @@ class IdPayController extends Controller
         ]);
 
         $package = Package::findOrFail($request->package_id);
-        // IDPay uses Rial - multiply Toman by 10
-        $amount = (int) round($package->price * 10);
+
+        // Detect base currency from language settings (P1-2)
+        $currentLang = session()->has('lang')
+            ? \App\Models\Language::where('code', session()->get('lang'))->first()
+            : \App\Models\Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return back()->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        // IDPay requires Rial (IRR). Convert Toman → Rial if needed.
+        $amount = (int) round($baseCurrency === 'IRT' ? $package->price * 10 : $package->price);
+
+        // Min amount check for IDPay: 10,000 Rial (P1-3)
+        if ($amount < 10000) {
+            return back()->with('error', 'حداقل مبلغ قابل پرداخت ۱۰،۰۰۰ ریال است.');
+        }
+
         $orderId = 'IDPAY_' . Str::uuid()->toString();
         $callbackUrl = route('membership.idpay.success');
 
@@ -107,22 +124,37 @@ class IdPayController extends Controller
         $paymentId = $request->input('id');
         $status = $request->input('status');
 
-        $transaction = Transaction::where('transaction_id', $paymentId)
-            ->where('gateway_id', $this->gateway->id)
-            ->first();
-
-        if (!$transaction) {
-            Log::channel('payment')->warning('IDPay callback: transaction not found', [
-                'payment_id' => $paymentId,
-            ]);
-            return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+        // Idempotency: lock the row and check it's still pending (P1-5)
+        try {
+            $transaction = DB::transaction(function () use ($paymentId) {
+                $t = Transaction::where('transaction_id', $paymentId)
+                    ->where('gateway_id', $this->gateway->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('IDPay callback: transaction not found', ['payment_id' => $paymentId]);
+                return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+            }
+            Log::channel('payment')->info('IDPay callback: duplicate/already processed', ['payment_id' => $paymentId, 'state' => $msg]);
+            return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '10') {
             // Payment successful, verify
             $gatewayInfo = json_decode($this->gateway->information, true);
             $apiKey = $gatewayInfo['api_key'] ?? '';
-            $sandbox = $gatewayInfo['sandbox'] ?? 0;
+            $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
 
             try {
                 $response = Http::timeout(30)->withHeaders([
@@ -143,7 +175,8 @@ class IdPayController extends Controller
                     'track_id' => $result['track_id'] ?? null,
                 ]);
 
-                if ($response->successful() && isset($result['status']) && $result['status'] == '100') {
+                if ($response->successful() && isset($result['status']) && $result['status'] == '100'
+                    && isset($result['amount']) && (int) $result['amount'] === (int) $transaction->amount) {
                     $transaction->update([
                         'status' => 'success',
                         'tracking_code' => $result['track_id'] ?? null,
@@ -153,9 +186,17 @@ class IdPayController extends Controller
                         ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . ($result['track_id'] ?? ''));
                 } else {
                     $transaction->update(['status' => 'failed']);
-                    $error_message = $result['error_message'] ?? 'پرداخت تایید نشد.';
-                    return redirect()->route('user.gateways')
-                        ->with('error', $error_message);
+                    $mismatch = isset($result['amount']) && (int) $result['amount'] !== (int) $transaction->amount;
+                    Log::channel('payment')->warning('IDPay verify failed', [
+                        'payment_id' => $paymentId,
+                        'expected_amount' => $transaction->amount,
+                        'received_amount' => $result['amount'] ?? null,
+                        'result' => $result,
+                    ]);
+                    $error_message = $mismatch
+                        ? 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.'
+                        : ($result['error_message'] ?? 'پرداخت تایید نشد.');
+                    return redirect()->route('user.gateways')->with('error', $error_message);
                 }
             } catch (\Exception $e) {
                 $transaction->update(['status' => 'failed']);
@@ -164,9 +205,10 @@ class IdPayController extends Controller
                     'error' => $e->getMessage(),
                 ]);
                 return redirect()->route('user.gateways')
-                    ->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+                    ->with('error', 'خطا در تایید پرداخت. لطفاً مجدداً تلاش کنید.');
             }
         } else {
+            $transaction->update(['status' => 'failed']);
             $error_messages = [
                 '-1' => 'ارسال اطلاعات ناموفق بود.',
                 '-2' => 'خطای داخلی سیستم.',

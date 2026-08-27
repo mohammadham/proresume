@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PaymentGateway;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Package;
@@ -27,7 +28,25 @@ class PayIrController extends Controller
             'package_id' => 'required|integer|exists:packages,id',
         ]);
 
-        $amount = $request->amount;
+        $package = Package::findOrFail($request->package_id);
+
+        // Detect base currency (P1-2). Pay.ir requires Rial (IRR).
+        $currentLang = session()->has('lang')
+            ? \App\Models\Language::where('code', session()->get('lang'))->first()
+            : \App\Models\Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return back()->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        // Convert Toman → Rial if needed
+        $amount = (int) round($baseCurrency === 'IRT' ? $package->price * 10 : $package->price);
+
+        // Min amount check for Pay.ir: 10,000 Rial (P1-3)
+        if ($amount < 10000) {
+            return back()->with('error', 'حداقل مبلغ قابل پرداخت ۱۰،۰۰۰ ریال است.');
+        }
+
         $orderId = 'PAYIR_' . Str::uuid()->toString();
         $callbackUrl = route('membership.payir.success');
 
@@ -102,15 +121,30 @@ class PayIrController extends Controller
         $paymentId = $request->input('transId');
         $status = $request->input('status');
 
-        $transaction = Transaction::where('transaction_id', $paymentId)
-            ->where('gateway_id', $this->gateway->id)
-            ->first();
-
-        if (!$transaction) {
-            Log::channel('payment')->warning('Pay.ir callback: transaction not found', [
-                'payment_id' => $paymentId,
-            ]);
-            return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+        // Idempotency: lock the row and check it's still pending (P1-5)
+        try {
+            $transaction = DB::transaction(function () use ($paymentId) {
+                $t = Transaction::where('transaction_id', $paymentId)
+                    ->where('gateway_id', $this->gateway->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('Pay.ir callback: transaction not found', ['payment_id' => $paymentId]);
+                return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+            }
+            Log::channel('payment')->info('Pay.ir callback: duplicate/already processed', ['payment_id' => $paymentId, 'state' => $msg]);
+            return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '1' || $status == 1) {
@@ -252,8 +286,7 @@ class PayIrController extends Controller
             ]);
             return [
                 'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage()
-// TEST_MARKER_FOR_EXCEPTION_FIX,
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
