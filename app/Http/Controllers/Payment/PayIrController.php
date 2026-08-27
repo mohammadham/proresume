@@ -112,7 +112,7 @@ class PayIrController extends Controller
                 'order_id' => $orderId,
                 'error' => $e->getMessage(),
             ]);
-            return back()->with('error', 'خطا در پرداخت: ' . $e->getMessage());
+            return back()->with('error', 'خطا در پرداخت. لطفاً بعداً تلاش کنید.');
         }
     }
 
@@ -170,6 +170,20 @@ class PayIrController extends Controller
                 ]);
 
                 if ($response->successful() && isset($result['status']) && $result['status'] == 1) {
+                    // P1-4: amount mismatch protection
+                    $verifiedAmount = isset($result['amount']) ? (int) $result['amount'] : null;
+                    $expectedAmount = (int) $transaction->amount;
+                    if ($verifiedAmount !== null && $verifiedAmount !== $expectedAmount) {
+                        $transaction->update(['status' => 'failed']);
+                        Log::channel('payment')->warning('Pay.ir amount mismatch (admin)', [
+                            'trans_id' => $paymentId,
+                            'verified_amount' => $verifiedAmount,
+                            'expected_amount' => $expectedAmount,
+                        ]);
+                        return redirect()->route('user.gateways')
+                            ->with('error', 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.');
+                    }
+
                     $transaction->update([
                         'status' => 'success',
                         'tracking_code' => $paymentId,
@@ -190,7 +204,7 @@ class PayIrController extends Controller
                     'error' => $e->getMessage(),
                 ]);
                 return redirect()->route('user.gateways')
-                    ->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+                    ->with('error', 'خطا در تایید پرداخت. لطفاً با پشتیبانی تماس بگیرید.');
             }
         } else {
             $error_messages = [
