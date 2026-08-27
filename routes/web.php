@@ -1155,17 +1155,17 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
         Route::get('/zibal/cancel', 'User\Payment\ZibalController@cancelPayment')
             ->name('customer.appointment.zibal.cancel');
 
-        Route::get('/idpay/notify', 'User\Payment\IdPayController@successPayment')
+        Route::match(['get','post'], '/idpay/notify', 'User\Payment\IdPayController@successPayment')
             ->name('customer.appointment.idpay.notify');
         Route::get('/idpay/cancel', 'User\Payment\IdPayController@cancelPayment')
             ->name('customer.appointment.idpay.cancel');
 
-        Route::get('/nextpay/notify', 'User\Payment\NextPayController@successPayment')
+        Route::match(['get','post'], '/nextpay/notify', 'User\Payment\NextPayController@successPayment')
             ->name('customer.appointment.nextpay.notify');
         Route::get('/nextpay/cancel', 'User\Payment\NextPayController@cancelPayment')
             ->name('customer.appointment.nextpay.cancel');
 
-        Route::get('/payir/notify', 'User\Payment\PayIrController@successPayment')
+        Route::match(['get','post'], '/payir/notify', 'User\Payment\PayIrController@successPayment')
             ->name('customer.appointment.payir.notify');
         Route::get('/payir/cancel', 'User\Payment\PayIrController@cancelPayment')
             ->name('customer.appointment.payir.cancel');

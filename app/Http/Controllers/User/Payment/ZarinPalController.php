@@ -10,7 +10,9 @@ use App\Models\User\UserPaymentGateway;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Redirect;
 use App\Models\Language;
@@ -44,45 +46,62 @@ class ZarinPalController extends Controller
     {
         $title = $_title;
         $price = $_amount;
-        $price = round($price);
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
 
-        // Generate unique order ID for idempotency
-        $orderId = 'ZARINPAL_' . Str::uuid()->toString();
+        // P1-2: Base currency check (ZarinPal supports both IRR and IRT natively)
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRT');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+        $price = (int) round($price);
+        $currency = $baseCurrency;
 
-        // Store request data in session for later use
+        // P1-3: Min amount
+        $minAmount = $currency === 'IRT' ? 100 : 1000;
+        if ($price < $minAmount) {
+            return redirect($cancel_url)->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
+        }
+
+        $orderId = 'ZARINPAL_' . Str::uuid()->toString();
         Session::put('request', $request->all());
         Session::put('amount', $_amount);
         Session::put('paymentFor', Session::get('paymentFor'));
         Session::put('zarinpal_order_id', $orderId);
 
-        // Prepare data for ZarinPal API
         $api_url = $this->sandbox_mode == 1
             ? 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
             : 'https://api.zarinpal.com/pg/v4/payment/request.json';
 
         $payload = [
             'merchant_id' => $this->merchant_id,
-            'amount' => $price, // Amount in Tomans
+            'amount' => $price,
+            'currency' => $currency,
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
                 'mobile' => $request->phone ?? '',
                 'email' => $request->email ?? '',
-                'order_id' => $orderId
-            ]
+                'order_id' => $orderId,
+            ],
         ];
 
         try {
             $response = Http::timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
+            Log::channel('payment')->info('ZarinPal payment initiation (vendor)', [
+                'amount' => $price, 'sandbox' => $this->sandbox_mode,
+                'code' => $result['data']['code'] ?? 'unknown', 'order_id' => $orderId,
+            ]);
+
             if (isset($result['data']['code']) && $result['data']['code'] == 100) {
                 $authority = $result['data']['authority'];
                 Session::put('zarinpal_authority', $authority);
 
-                // Save transaction with idempotency key
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => UserPaymentGateway::whereKeyword('zarinpal')->where('user_id', getUser()->id)->value('id'),
@@ -90,21 +109,22 @@ class ZarinPalController extends Controller
                     'transaction_id' => $authority,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => 'IRR',
+                    'currency' => $currency,
                     'ip' => $request->ip(),
                 ]);
 
                 $payment_url = $this->sandbox_mode == 1
                     ? 'https://sandbox.zarinpal.com/pg/StartPay/' . $authority
                     : 'https://www.zarinpal.com/pg/StartPay/' . $authority;
-
                 return Redirect::away($payment_url);
-            } else {
-                $error_message = $result['errors']['message'] ?? 'خطا در اتصال به درگاه پرداخت';
-                return redirect($cancel_url)->with('error', $error_message);
             }
+
+            $error_message = $result['errors']['message'] ?? 'خطا در اتصال به درگاه پرداخت';
+            Log::channel('payment')->warning('ZarinPal init failed (vendor)', ['result' => $result]);
+            return redirect($cancel_url)->with('error', $error_message);
         } catch (\Exception $e) {
-            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            Log::channel('payment')->error('ZarinPal init error (vendor)', ['error' => $e->getMessage()]);
+            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت.');
         }
     }
 
@@ -119,13 +139,25 @@ class ZarinPalController extends Controller
         $status = $request->get('Status');
         $cancel_url = route('customer.appointment.zarinpal.cancel');
 
-        // Find transaction by authority (stored as transaction_id)
-        $transaction = Transaction::where('transaction_id', $authority)
-            ->whereHas('gateway', function($q) { $q->where('keyword', 'zarinpal'); })
-            ->first();
-
-        if (!$transaction) {
-            return redirect($cancel_url)->with('error', 'کد مرجع پرداخت معتبر نیست');
+        // P1-5: Idempotency — lockForUpdate
+        try {
+            $transaction = DB::transaction(function () use ($authority) {
+                $t = Transaction::where('transaction_id', $authority)
+                    ->whereHas('gateway', function ($q) { $q->where('keyword', 'zarinpal'); })
+                    ->lockForUpdate()->first();
+                if (!$t) { throw new \DomainException('TRANSACTION_NOT_FOUND'); }
+                if ($t->status !== 'pending') { throw new \DomainException('ALREADY_PROCESSED:' . $t->status); }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('ZarinPal callback: transaction not found (vendor)', ['authority' => $authority]);
+                return redirect($cancel_url)->with('error', 'کد مرجع پرداخت معتبر نیست');
+            }
+            Log::channel('payment')->info('ZarinPal callback: duplicate (vendor)', ['authority' => $authority, 'state' => $msg]);
+            return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         // Check if payment was successful on ZarinPal side
@@ -142,6 +174,7 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'amount' => $transaction->amount,
+            'currency' => $transaction->currency ?? 'IRT',
             'authority' => $authority
         ];
 
