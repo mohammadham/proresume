@@ -2,20 +2,16 @@
 
 namespace App\Http\Controllers\User\Payment;
 
-use App\Http\Controllers\Front\UserCheckoutController;
-use App\Http\Helpers\MegaMailer;
-use App\Models\Package;
-use App\Models\User\UserPaymentGateway;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Redirect;
 use App\Models\Language;
 use App\Models\User\BasicSetting;
+use App\Models\User\UserPaymentGateway;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 
 class NextPayController extends Controller
 {
@@ -52,57 +48,68 @@ class NextPayController extends Controller
         Session::put('paymentFor', Session::get('paymentFor'));
 
         $api_url = $this->sandbox_mode == 1
-            ? 'https://api.sandbox.nextpay.org/v1/payments/create'
-            : 'https://api.nextpay.org/v1/payments/create';
+            ? 'https://nextpay.org/nx/gateway/token'
+            : 'https://nextpay.org/nx/gateway/token';
 
         $order_id = 'NEXTPAY_' . Str::uuid()->toString();
 
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRT');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        $amount = (int) round($price);
+        $currency = $baseCurrency;
+        $minAmount = $currency === 'IRT' ? 100 : 1000;
+        if ($amount < $minAmount) {
+            return redirect($cancel_url)->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
+        }
+
         $payload = [
             'api_key' => $this->api_key,
-            'amount' => $price,
+            'amount' => $amount,
             'order_id' => $order_id,
             'callback_url' => $this->callback_url,
             'payer_name' => $request->fname . ' ' . $request->lname ?? 'کاربر',
             'payer_mobile' => $request->phone ?? '',
             'payer_email' => $request->email ?? '',
             'description' => $this->description,
+            'currency' => $currency,
         ];
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($api_url, $payload);
-
+            $response = Http::asForm()->timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
-            Log::channel('payment')->info('NextPay payment initiation', [
+            Log::channel('payment')->info('NextPay payment initiation (appointment)', [
                 'order_id' => $order_id,
-                'amount' => $price,
+                'amount' => $amount,
                 'sandbox' => $this->sandbox_mode,
-                'response_code' => $result['code'] ?? $result['status'] ?? 'unknown',
+                'response_code' => $result['code'] ?? 'unknown',
                 'has_trans_id' => isset($result['trans_id']),
             ]);
 
-            if (isset($result['code']) && $result['code'] == 0 && isset($result['trans_id'])) {
+            if (isset($result['code']) && $result['code'] == -1 && isset($result['trans_id'])) {
                 $trans_id = $result['trans_id'];
-                $payment_link = $result['payment_link'] ?? ($this->sandbox_mode == 1
-                    ? 'https://api.sandbox.nextpay.org/v1/payments/pay/' . $trans_id
-                    : 'https://api.nextpay.org/v1/payments/pay/' . $trans_id);
+                $payment_link = 'https://nextpay.org/nx/gateway/payment/' . $trans_id;
 
                 Session::put('nextpay_trans_id', $trans_id);
                 Session::put('nextpay_order_id', $order_id);
 
                 return Redirect::away($payment_link);
             } else {
-                $error_message = $result['message'] ?? $result['code'] ?? 'خطa در اتصال به درگاه پرداخت';
+                $error_message = $result['message'] ?? $result['code'] ?? 'خطا در اتصال به درگاه پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-            Log::channel('payment')->error('NextPay payment initiation error', [
+            Log::channel('payment')->error('NextPay payment initiation error (appointment)', [
                 'order_id' => $order_id,
                 'error' => $e->getMessage(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطa در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطا در پرداخت. لطفاً مجدداً تلاش کنید.');
         }
     }
 
@@ -131,21 +138,18 @@ class NextPayController extends Controller
 
         if ($status == '0') {
             try {
-                $api_url = $this->sandbox_mode == 1
-                    ? 'https://api.sandbox.nextpay.org/v1/payments/verify'
-                    : 'https://api.nextpay.org/v1/payments/verify';
+                $api_url = 'https://nextpay.org/nx/gateway/verify';
 
-                $response = Http::timeout(30)->withHeaders([
-                    'Content-Type' => 'application/json',
-                ])->post($api_url, [
+                $response = Http::asForm()->timeout(30)->post($api_url, [
                     'api_key' => $this->api_key,
                     'trans_id' => $trans_id,
                     'order_id' => $session_order_id,
+                    'amount' => Session::get('amount'),
                 ]);
 
                 $result = $response->json();
 
-                Log::channel('payment')->info('NextPay payment verification', [
+                Log::channel('payment')->info('NextPay payment verification (appointment)', [
                     'trans_id' => $trans_id,
                     'order_id' => $session_order_id,
                     'code' => $result['code'] ?? 'unknown',
@@ -173,15 +177,15 @@ class NextPayController extends Controller
                         return $this->handleExtendSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs);
                     }
                 } else {
-                    $error_message = $result['message'] ?? 'خطa در تایید پرداخت';
+                    $error_message = $result['message'] ?? 'خطا در تایید پرداخت';
                     return redirect($cancel_url)->with('error', $error_message);
                 }
             } catch (\Exception $e) {
-                Log::channel('payment')->error('NextPay payment verification error', [
+                Log::channel('payment')->error('NextPay payment verification error (appointment)', [
                     'trans_id' => $trans_id,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+                return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
             }
         } else {
             $error_messages = [
@@ -192,7 +196,7 @@ class NextPayController extends Controller
                 '5' => 'اطلاعات ارسال شده نامعتبر است.',
                 '6' => 'درگاه غیر فعال است.',
                 '7' => 'پرداخت لغو شده توسط کاربر.',
-                '8' => 'خطa داخلی سیستم.',
+                '8' => 'خطای داخلی سیستم.',
             ];
             return redirect($cancel_url)->with('error', $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status);
         }
@@ -290,15 +294,10 @@ class NextPayController extends Controller
 
     /**
      * Refund a payment
-     *
-     * @param string $transId The transId from original payment
-     * @param float|null $amount Amount to refund (null = full refund)
-     * @param string $reason Reason for refund
-     * @return array Result with success status and message
      */
     public function refund($transId, $amount = null, $reason = 'Refund requested')
     {
-        $apiUrl = 'https://api.nextpay.org/v1/payments/refund';
+        $apiUrl = 'https://nextpay.org/nx/gateway/refund';
 
         $gateway = UserPaymentGateway::whereKeyword('nextpay')->where('user_id', getUser()->id)->first();
         $gatewayInfo = json_decode($gateway->information, true);
@@ -322,11 +321,15 @@ class NextPayController extends Controller
         }
 
         try {
-            $response = Http::timeout(30)->withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://api.sandbox.nextpay.org/v1/payments/refund' : $apiUrl, $payload);
+            $response = Http::asForm()->timeout(30)->post($apiUrl, $payload);
 
             $result = $response->json();
+
+            Log::channel('payment')->info('NextPay refund request (appointment)', [
+                'trans_id' => $transId,
+                'amount' => $amount,
+                'code' => $result['code'] ?? 'unknown',
+            ]);
 
             if ($response->successful() && isset($result['code']) && $result['code'] == 0) {
                 return [
@@ -335,25 +338,26 @@ class NextPayController extends Controller
                     'ref_id' => $transId,
                 ];
             } else {
-                $error_message = $result['message'] ?? 'خطa در بازپرداخت';
+                $error_message = $result['message'] ?? 'خطا در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
         } catch (\Exception $e) {
+            Log::channel('payment')->error('NextPay refund error (appointment)', [
+                'trans_id' => $transId,
+                'error' => $e->getMessage(),
+            ]);
             return [
                 'success' => false,
-                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
 
     /**
-     * Void a payment (cancel before settlement)
-     *
-     * @param string $transId The transId from original payment
-     * @return array Result with success status and message
+     * Void a payment
      */
     public function void($transId)
     {

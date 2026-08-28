@@ -6,7 +6,6 @@ use App\Http\Controllers\Front\UserCheckoutController;
 use App\Http\Helpers\MegaMailer;
 use App\Models\Package;
 use App\Models\User\UserPaymentGateway;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
@@ -39,30 +38,45 @@ class IdPayController extends Controller
         }
     }
 
-    public function paymentProcess(Request $request, $_amount, $_title, $_success_url, $_cancel_url)
+    public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)
     {
         $title = $_title;
         $price = $_amount;
-        $price = round($price);
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
 
-        Session::put('request', $request->all());
-        Session::put('amount', $_amount);
-        Session::put('paymentFor', Session::get('paymentFor'));
+        $requestData = is_array($request) ? $request : $request->all();
+        $phone = is_array($request) ? ($request['phone'] ?? '') : ($request->phone ?? '');
+        $email = is_array($request) ? ($request['email'] ?? '') : ($request->email ?? '');
 
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://api.idpay.ir/v1.1/payment'
-            : 'https://api.idpay.ir/v1.1/payment';
+        // P1-2: Base currency check. IDPay requires Rial (IRR).
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        $amount = (int) round($baseCurrency === 'IRT' ? $price * 10 : $price);
+
+        // P1-3: Min amount check for IDPay: 10,000 Rial
+        if ($amount < 10000) {
+            return redirect($cancel_url)->with('error', 'حداقل مبلغ قابل پرداخت ۱۰،۰۰۰ ریال است.');
+        }
 
         $order_id = 'IDPAY_' . Str::uuid()->toString();
 
+        Session::put('request', $requestData);
+        Session::put('amount', $_amount);
+        Session::put('paymentFor', Session::get('paymentFor'));
+
         $payload = [
             'order_id' => $order_id,
-            'amount' => $price,
-            'name' => $request->fname . ' ' . $request->lname ?? 'کاربر',
-            'phone' => $request->phone ?? '',
-            'mail' => $request->email ?? '',
+            'amount' => $amount,
+            'name' => $requestData['fname'] . ' ' . ($requestData['lname'] ?? '') ?: 'کاربر',
+            'phone' => $phone,
+            'mail' => $email,
             'desc' => $this->description,
             'callback' => $this->callback_url,
         ];
@@ -72,13 +86,13 @@ class IdPayController extends Controller
                 'Content-Type' => 'application/json',
                 'X-API-KEY' => $this->api_key,
                 'X-SANDBOX' => $this->sandbox_mode == 1 ? '1' : '0',
-            ])->post($api_url, $payload);
+            ])->post('https://api.idpay.ir/v1.1/payment', $payload);
 
             $result = $response->json();
 
-            Log::channel('payment')->info('IDPay payment initiation', [
+            Log::channel('payment')->info('IDPay payment initiation (vendor)', [
                 'order_id' => $order_id,
-                'amount' => $price,
+                'amount' => $amount,
                 'sandbox' => $this->sandbox_mode,
                 'response_code' => $result['error_code'] ?? $result['status'] ?? 'unknown',
                 'has_link' => isset($result['link']),
@@ -93,19 +107,19 @@ class IdPayController extends Controller
 
                 return Redirect::away($payment_link);
             } else {
-                $error_message = $result['error_message'] ?? $result['error_code'] ?? 'خطa در اتصال به درگاه پرداخت';
+                $error_message = $result['error_message'] ?? $result['error_code'] ?? 'خطا در اتصال به درگاه پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-            Log::channel('payment')->error('IDPay payment initiation error', [
+            Log::channel('payment')->error('IDPay payment initiation error (vendor)', [
                 'order_id' => $order_id,
                 'error' => $e->getMessage(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطa در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطا در پرداخت. لطفاً مجدداً تلاش کنید.');
         }
     }
 
-    public function successPayment(Request $request)
+    public function successPayment($request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
@@ -113,9 +127,9 @@ class IdPayController extends Controller
         $bs = $currentLang->basic_setting;
         $cancel_url = Session::get('cancel_url') ?? route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1]);
 
-        $payment_id = $request->input('id');
-        $status = $request->input('status');
-        $order_id = $request->input('order_id');
+        $payment_id = is_array($request) ? ($request['id'] ?? '') : $request->input('id');
+        $status = is_array($request) ? ($request['status'] ?? '') : $request->input('status');
+        $order_id = is_array($request) ? ($request['order_id'] ?? '') : $request->input('order_id');
 
         $session_payment_id = Session::get('idpay_payment_id');
         $session_order_id = Session::get('idpay_order_id');
@@ -130,22 +144,18 @@ class IdPayController extends Controller
 
         if ($status == '10') {
             try {
-                $api_url = $this->sandbox_mode == 1
-                    ? 'https://api.idpay.ir/v1.1/payment/verify'
-                    : 'https://api.idpay.ir/v1.1/payment/verify';
-
                 $response = Http::timeout(30)->withHeaders([
                     'Content-Type' => 'application/json',
                     'X-API-KEY' => $this->api_key,
                     'X-SANDBOX' => $this->sandbox_mode == 1 ? '1' : '0',
-                ])->post($api_url, [
+                ])->post('https://api.idpay.ir/v1.1/payment/verify', [
                     'id' => $payment_id,
                     'order_id' => $session_order_id,
                 ]);
 
                 $result = $response->json();
 
-                Log::channel('payment')->info('IDPay payment verification', [
+                Log::channel('payment')->info('IDPay payment verification (vendor)', [
                     'payment_id' => $payment_id,
                     'order_id' => $session_order_id,
                     'status' => $result['status'] ?? 'unknown',
@@ -172,20 +182,20 @@ class IdPayController extends Controller
                         return $this->handleExtendSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs);
                     }
                 } else {
-                    $error_message = $result['error_message'] ?? 'خطa در تایید پرداخت';
+                    $error_message = $result['error_message'] ?? 'خطا در تایید پرداخت';
                     return redirect($cancel_url)->with('error', $error_message);
                 }
             } catch (\Exception $e) {
-                Log::channel('payment')->error('IDPay payment verification error', [
+                Log::channel('payment')->error('IDPay payment verification error (vendor)', [
                     'payment_id' => $payment_id,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+                return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
             }
         } else {
             $error_messages = [
                 '-1' => 'ارسال اطلاعات ناموفق بود.',
-                '-2' => 'خطa داخلی سیستم.',
+                '-2' => 'خطای داخلی سیستم.',
                 '-3' => 'اطلاعات ارسال شده نامعتبر است.',
                 '-4' => 'مبلغ کمتر از حداقل مجاز است.',
                 '-5' => 'مبلغ بیشتر از حداکثر مجاز است.',
@@ -289,11 +299,6 @@ class IdPayController extends Controller
 
     /**
      * Refund a payment
-     *
-     * @param string $paymentId The payment ID from original payment
-     * @param float|null $amount Amount to refund (null = full refund)
-     * @param string $reason Reason for refund
-     * @return array Result with success status and message
      */
     public function refund($paymentId, $amount = null, $reason = 'Refund requested')
     {
@@ -335,25 +340,26 @@ class IdPayController extends Controller
                     'ref_id' => $result['refund_id'] ?? null,
                 ];
             } else {
-                $error_message = $result['error_message'] ?? 'خطa در بازپرداخت';
+                $error_message = $result['error_message'] ?? 'خطا در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
         } catch (\Exception $e) {
+            Log::channel('payment')->error('IDPay refund error (vendor)', [
+                'payment_id' => $paymentId,
+                'error' => $e->getMessage(),
+            ]);
             return [
                 'success' => false,
-                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
 
     /**
-     * Void a payment (cancel before settlement)
-     *
-     * @param string $paymentId The payment ID from original payment
-     * @return array Result with success status and message
+     * Void a payment
      */
     public function void($paymentId)
     {

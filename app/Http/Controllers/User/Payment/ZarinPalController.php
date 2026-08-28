@@ -42,12 +42,17 @@ class ZarinPalController extends Controller
         }
     }
 
-    public function paymentProcess(Request $request, $_amount, $_title, $_success_url, $_cancel_url)
+    public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)
     {
         $title = $_title;
         $price = $_amount;
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
+
+        $requestData = is_array($request) ? $request : $request->all();
+        $phone = is_array($request) ? ($request['phone'] ?? '') : ($request->phone ?? '');
+        $email = is_array($request) ? ($request['email'] ?? '') : ($request->email ?? '');
+        $ip = is_array($request) ? request()->ip() : $request->ip();
 
         // P1-2: Base currency check (ZarinPal supports both IRR and IRT natively)
         $currentLang = session()->has('lang')
@@ -67,7 +72,7 @@ class ZarinPalController extends Controller
         }
 
         $orderId = 'ZARINPAL_' . Str::uuid()->toString();
-        Session::put('request', $request->all());
+        Session::put('request', $requestData);
         Session::put('amount', $_amount);
         Session::put('paymentFor', Session::get('paymentFor'));
         Session::put('zarinpal_order_id', $orderId);
@@ -83,8 +88,8 @@ class ZarinPalController extends Controller
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
-                'mobile' => $request->phone ?? '',
-                'email' => $request->email ?? '',
+                'mobile' => $phone,
+                'email' => $email,
                 'order_id' => $orderId,
             ],
         ];
@@ -110,7 +115,7 @@ class ZarinPalController extends Controller
                     'order_id' => $orderId,
                     'status' => 'pending',
                     'currency' => $currency,
-                    'ip' => $request->ip(),
+                    'ip' => $ip,
                 ]);
 
                 $payment_url = $this->sandbox_mode == 1
@@ -128,15 +133,15 @@ class ZarinPalController extends Controller
         }
     }
 
-    public function successPayment(Request $request)
+    public function successPayment($request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
         $be = $currentLang->basic_extended;
         $bs = $currentLang->basic_setting;
 
-        $authority = $request->get('Authority');
-        $status = $request->get('Status');
+        $authority = is_array($request) ? ($request['Authority'] ?? '') : $request->get('Authority');
+        $status = is_array($request) ? ($request['Status'] ?? '') : $request->get('Status');
         $cancel_url = route('customer.appointment.zarinpal.cancel');
 
         // P1-5: Idempotency — lockForUpdate
@@ -268,7 +273,8 @@ class ZarinPalController extends Controller
             }
         } catch (\Exception $e) {
             $transaction->update(['status' => 'failed']);
-            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت: ' . $e->getMessage());
+            Log::channel('payment')->error('ZarinPal verify error (vendor)', ['authority' => $authority, 'error' => $e->getMessage()]);
+            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
         }
 
         return redirect($cancel_url);
@@ -321,76 +327,79 @@ class ZarinPalController extends Controller
      */
     public function refund($authority, $amount = null, $reason = 'Refund requested')
     {
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
-            : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
+        // $api_url = $this->sandbox_mode == 1
+        //     ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
+        //     : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
 
-        $payload = [
-            'merchant_id' => $this->merchant_id,
-            'authority' => $authority,
-        ];
+        // $payload = [
+        //     'merchant_id' => $this->merchant_id,
+        //     'authority' => $authority,
+        // ];
 
-        if ($amount !== null) {
-            $payload['amount'] = $amount;
-        }
+        // if ($amount !== null) {
+        //     $payload['amount'] = $amount;
+        // }
 
-        try {
-            $response = Http::timeout(30)->post($api_url, $payload);
-            $result = $response->json();
+        // try {
+        //     $response = Http::timeout(30)->post($api_url, $payload);
+        //     $result = $response->json();
 
-            if (isset($result['data']['code']) && $result['data']['code'] == 100) {
-                return [
-                    'success' => true,
-                    'message' => 'بازپرداخت با موفقیت انجام شد.',
-                    'ref_id' => $result['data']['ref_id'] ?? null,
-                ];
-            } else {
-                $error_code = $result['data']['code'] ?? 0;
-                $error_messages = [
-                    -9 => 'خطای اعتبارسنجی داده‌ها',
-                    -10 => 'مرچنت کد یافت نشد',
-                    -11 => 'مرچنت غیرفعال است',
-                    -12 => 'مبلغ نامعتبر است',
-                    -13 => 'مبلغ کمتر از حداقل مجاز',
-                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
-                    -15 => 'تراکنش تکراری',
-                    -16 => 'خطای داخلی',
-                    -17 => 'IP مسدود شده',
-                    -18 => 'مرچنت تایید نشده',
-                    -19 => 'Callback URL نامعتبر',
-                    -20 => 'Description نامعتبر',
-                    -21 => 'موبایل نامعتبر',
-                    -22 => 'ایمیل نامعتبر',
-                    -30 => 'تراکنش یافت نشد',
-                    -31 => 'تراکنش تایید شده است',
-                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
-                    -33 => 'تراکنش انقضا یافته',
-                    -34 => 'تراکنش لغو شده',
-                    -35 => 'تراکنش نامعتبر',
-                    -36 => 'تراکنش تکراری',
-                    -40 => 'خطای سیستمی',
-                    -41 => 'مرچنت تایید نشده',
-                    -42 => 'تراکنش در انتظار تایید',
-                    -50 => 'خطای بانک',
-                    -51 => 'بانک در دسترس نیست',
-                    -52 => 'خطای شبکه',
-                    -53 => 'مبلغ کمتر از حداقل',
-                    -54 => 'مبلغ بیشتر از حداکثر',
-                    -60 => 'بازپرداخت امکان‌پذیر نیست',
-                    -61 => 'مبلغ بازپرداخت بیشتر از مبلغ تراکنش',
-                ];
-                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در بازپرداخت');
-                return [
-                    'success' => false,
-                    'message' => $error_message,
-                ];
-            }
-        } catch (\Exception $e) {
-            return [
-                'success' => false,
-                'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
-            ];
-        }
+        //     if (isset($result['data']['code']) && $result['data']['code'] == 100) {
+        //         return [
+        //             'success' => true,
+        //             'message' => 'بازپرداخت با موفقیت انجام شد.',
+        //             'ref_id' => $result['data']['ref_id'] ?? null,
+        //         ];
+        //     } else {
+        //         $error_code = $result['data']['code'] ?? 0;
+        //         $error_messages = [
+        //             -9 => 'خطای اعتبارسنجی داده‌ها',
+        //             -10 => 'مرچنت کد یافت نشد',
+        //             -11 => 'مرچنت غیرفعال است',
+        //             -12 => 'مبلغ نامعتبر است',
+        //             -13 => 'مبلغ کمتر از حداقل مجاز',
+        //             -14 => 'مبلغ بیشتر از حداکثر مجاز',
+        //             -15 => 'تراکنش تکراری',
+        //             -16 => 'خطای داخلی',
+        //             -17 => 'IP مسدود شده',
+        //             -18 => 'مرچنت تایید نشده',
+        //             -19 => 'Callback URL نامعتبر',
+        //             -20 => 'Description نامعتبر',
+        //             -21 => 'موبایل نامعتبر',
+        //             -22 => 'ایمیل نامعتبر',
+        //             -30 => 'تراکنش یافت نشد',
+        //             -31 => 'تراکنش تایید شده است',
+        //             -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
+        //             -33 => 'تراکنش انقضا یافته',
+        //             -34 => 'تراکنش لغو شده',
+        //             -35 => 'تراکنش نامعتبر',
+        //             -36 => 'تراکنش تکراری',
+        //             -40 => 'خطای سیستمی',
+        //             -41 => 'مرچنت تایید نشده',
+        //             -42 => 'تراکنش در انتظار تایید',
+        //             -50 => 'خطای بانک',
+        //             -51 => 'بانک در دسترس نیست',
+        //             -52 => 'خطای شبکه',
+        //             -53 => 'مبلغ کمتر از حداقل',
+        //             -54 => 'مبلغ بیشتر از حداکثر',
+        //             -60 => 'بازپرداخت امکان‌پذیر نیست',
+        //             -61 => 'مبلغ بازپرداخت بیشتر از مبلغ تراکنش',
+        //         ];
+        //         $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در بازپرداخت');
+        //         return [
+        //             'success' => false,
+        //             'message' => $error_message,
+        //         ];
+        //     }
+        // } catch (\Exception $e) {
+        //     return [
+        //         'success' => false,
+        //         'message' => 'خطا در بازپرداخت: ' . $e->getMessage(),
+        //     ];
+        // }
+        // NOTE: ZarinPal V4 refund requires OAuth Bearer access token + session_id
+        // (not merchant_id + authority). Throw until OAuth is wired up.
+        throw new \RuntimeException('ZarinPal refund is not configured. Please contact support.');
     }
 
     /**

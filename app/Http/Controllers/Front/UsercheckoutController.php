@@ -36,6 +36,11 @@ use App\Http\Controllers\User\Payment\FlutterWaveController;
 use App\Http\Controllers\User\Payment\MercadopagoController;
 use App\Http\Controllers\User\Payment\AuthorizenetController;
 use App\Http\Controllers\User\Payment\PerfectMoneyController;
+use App\Http\Controllers\User\Payment\ZarinPalController;
+use App\Http\Controllers\User\Payment\ZibalController;
+use App\Http\Controllers\User\Payment\IdPayController;
+use App\Http\Controllers\User\Payment\NextPayController;
+use App\Http\Controllers\User\Payment\PayIrController;
 
 class UsercheckoutController extends Controller
 {
@@ -459,6 +464,36 @@ class UsercheckoutController extends Controller
             $amount = $request->price;
             $perfectMoneyPayment = new PerfectMoneyController();
             return $perfectMoneyPayment->paymentProcess($user_request, $amount, $title, $bs);
+        } elseif ($request->payment_method == 'ZarinPal') {
+            $amount = $request->price;
+            $success_url = route('customer.appointment.zarinpal.success', getParam());
+            $cancel_url = route('customer.appointment.zarinpal.cancel', getParam());
+            $payment = new ZarinPalController();
+            return $payment->paymentProcess($user_request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Zibal') {
+            $amount = $request->price;
+            $success_url = route('customer.appointment.zibal.success', getParam());
+            $cancel_url = route('customer.appointment.zibal.cancel', getParam());
+            $payment = new ZibalController();
+            return $payment->paymentProcess($user_request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'IdPay') {
+            $amount = $request->price;
+            $success_url = route('customer.appointment.idpay.success', getParam());
+            $cancel_url = route('customer.appointment.idpay.cancel', getParam());
+            $payment = new IdPayController();
+            return $payment->paymentProcess($user_request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'NextPay') {
+            $amount = $request->price;
+            $success_url = route('customer.appointment.nextpay.success', getParam());
+            $cancel_url = route('customer.appointment.nextpay.cancel', getParam());
+            $payment = new NextPayController();
+            return $payment->paymentProcess($user_request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Pay.ir') {
+            $amount = $request->price;
+            $success_url = route('customer.appointment.payir.success', getParam());
+            $cancel_url = route('customer.appointment.payir.cancel', getParam());
+            $payment = new PayIrController();
+            return $payment->paymentProcess($user_request, $amount, $title, $success_url, $cancel_url);
         } elseif (in_array($request->payment_method, $offline_payment_gateways)) {
 
             $user_request['mode'] = 'offline';

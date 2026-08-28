@@ -52,14 +52,27 @@ class PayIrController extends Controller
         Session::put('paymentFor', Session::get('paymentFor'));
 
         $api_url = $this->sandbox_mode == 1
-            ? 'https://pay.ir/payment/sandbox/send'
-            : 'https://pay.ir/payment/send';
+            ? 'https://pay.ir/pg/sandbox/send'
+            : 'https://pay.ir/pg/send';
 
         $order_id = 'PAYIR_' . Str::uuid()->toString();
 
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        $amount = (int) round($baseCurrency === 'IRT' ? $price * 10 : $price);
+        if ($amount < 10000) {
+            return redirect($cancel_url)->with('error', 'حداقل مبلغ قابل پرداخت ۱۰،۰۰۰ ریال است.');
+        }
+
         $payload = [
             'api' => $this->api_key,
-            'amount' => $price,
+            'amount' => $amount,
             'redirect' => $this->callback_url,
             'factorNumber' => $order_id,
             'mobile' => $request->phone ?? '',
@@ -73,34 +86,34 @@ class PayIrController extends Controller
 
             $result = $response->json();
 
-            Log::channel('payment')->info('Pay.ir payment initiation', [
+            Log::channel('payment')->info('Pay.ir payment initiation (appointment, v2)', [
                 'order_id' => $order_id,
-                'amount' => $price,
+                'amount' => $amount,
                 'sandbox' => $this->sandbox_mode,
                 'status' => $result['status'] ?? 'unknown',
-                'has_trans_id' => isset($result['transId']),
+                'has_token' => isset($result['token']),
             ]);
 
-            if (isset($result['status']) && $result['status'] == 1 && isset($result['transId'])) {
-                $trans_id = $result['transId'];
+            if (isset($result['status']) && $result['status'] == 1 && !empty($result['token'])) {
+                $token = $result['token'];
                 $payment_link = $this->sandbox_mode == 1
-                    ? 'https://pay.ir/payment/sandbox/' . $trans_id
-                    : 'https://pay.ir/payment/' . $trans_id;
+                    ? 'https://pay.ir/pg/sandbox/' . $token
+                    : 'https://pay.ir/pg/' . $token;
 
-                Session::put('payir_trans_id', $trans_id);
+                Session::put('payir_token', $token);
                 Session::put('payir_order_id', $order_id);
 
                 return Redirect::away($payment_link);
             } else {
-                $error_message = $result['errorMessage'] ?? $result['status'] ?? 'خطa در اتصال به درگاه پرداخت';
+                $error_message = $result['errorMessage'] ?? $result['status'] ?? 'خطا در اتصال به درگاه پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-            Log::channel('payment')->error('Pay.ir payment initiation error', [
+            Log::channel('payment')->error('Pay.ir payment initiation error (appointment)', [
                 'order_id' => $order_id,
                 'error' => $e->getMessage(),
             ]);
-            return redirect($cancel_url)->with('error', 'خطa در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            return redirect($cancel_url)->with('error', 'خطا در پرداخت. لطفاً مجدداً تلاش کنید.');
         }
     }
 
@@ -112,17 +125,16 @@ class PayIrController extends Controller
         $bs = $currentLang->basic_setting;
         $cancel_url = Session::get('cancel_url') ?? route('front.register.view', ['status' => $requestData['package_type'] ?? 'regular', 'id' => $requestData['package_id'] ?? 1]);
 
-        $trans_id = $request->input('transId');
+        $token = $request->input('token');
         $status = $request->input('status');
-        $factor_number = $request->input('factorNumber');
 
-        $session_trans_id = Session::get('payir_trans_id');
+        $session_token = Session::get('payir_token');
         $session_order_id = Session::get('payir_order_id');
 
-        if (!$trans_id || $trans_id !== $session_trans_id) {
-            Log::channel('payment')->warning('Pay.ir callback: trans_id mismatch', [
-                'request_trans_id' => $trans_id,
-                'session_trans_id' => $session_trans_id,
+        if (!$token || $token !== $session_token) {
+            Log::channel('payment')->warning('Pay.ir callback: token mismatch', [
+                'request_token' => $token,
+                'session_token' => $session_token,
             ]);
             return redirect($cancel_url)->with('error', 'شناسه تراکنش نامعتبر است.');
         }
@@ -130,29 +142,29 @@ class PayIrController extends Controller
         if ($status == '1' || $status == 1) {
             try {
                 $api_url = $this->sandbox_mode == 1
-                    ? 'https://pay.ir/payment/sandbox/verify'
-                    : 'https://pay.ir/payment/verify';
+                    ? 'https://pay.ir/pg/sandbox/verify'
+                    : 'https://pay.ir/pg/verify';
 
                 $response = Http::timeout(30)->withHeaders([
                     'Content-Type' => 'application/json',
                 ])->post($api_url, [
                     'api' => $this->api_key,
-                    'transId' => $trans_id,
+                    'token' => $token,
                 ]);
 
                 $result = $response->json();
 
-                Log::channel('payment')->info('Pay.ir payment verification', [
-                    'trans_id' => $trans_id,
+                Log::channel('payment')->info('Pay.ir payment verification (appointment, v2)', [
+                    'token' => $token,
                     'status' => $result['status'] ?? 'unknown',
                     'amount' => $result['amount'] ?? null,
                 ]);
 
                 if (isset($result['status']) && $result['status'] == 1) {
-                    $transaction_id = 'PAYIR_' . $trans_id;
+                    $transaction_id = 'PAYIR_' . $token;
                     $transaction_details = json_encode([
-                        'trans_id' => $trans_id,
-                        'factor_number' => $factor_number,
+                        'token' => $token,
+                        'order_id' => $session_order_id,
                         'amount' => $result['amount'] ?? null,
                         'card_number' => $result['cardNumber'] ?? null,
                         'date' => now()->toDateTimeString(),
@@ -169,15 +181,15 @@ class PayIrController extends Controller
                         return $this->handleExtendSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs);
                     }
                 } else {
-                    $error_message = $result['errorMessage'] ?? 'خطa در تایید پرداخت';
+                    $error_message = $result['errorMessage'] ?? 'خطا در تایید پرداخت';
                     return redirect($cancel_url)->with('error', $error_message);
                 }
             } catch (\Exception $e) {
-                Log::channel('payment')->error('Pay.ir payment verification error', [
-                    'trans_id' => $trans_id,
+                Log::channel('payment')->error('Pay.ir payment verification error (appointment)', [
+                    'token' => $token,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+                return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
             }
         } else {
             $error_messages = [
@@ -189,7 +201,7 @@ class PayIrController extends Controller
                 '-5' => 'اطلاعات ارسال شده نامعتبر است.',
                 '-6' => 'درگاه غیر فعال است.',
                 '-7' => 'پرداخت لغو شده توسط کاربر.',
-                '-8' => 'خطa داخلی سیستم.',
+                '-8' => 'خطای داخلی سیستم.',
             ];
             return redirect($cancel_url)->with('error', $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status);
         }
@@ -202,7 +214,7 @@ class PayIrController extends Controller
         $requestData = Session::get('request');
         $paymentFor = Session::get('paymentFor');
         session()->flash('warning', __('cancel_payment'));
-        Session::forget('payir_trans_id');
+        Session::forget('payir_token');
         Session::forget('payir_order_id');
 
         if ($paymentFor == 'membership') {
@@ -247,7 +259,7 @@ class PayIrController extends Controller
         session()->flash('success', __('successful payment'));
         Session::forget('request');
         Session::forget('paymentFor');
-        Session::forget('payir_trans_id');
+        Session::forget('payir_token');
         Session::forget('payir_order_id');
         return redirect()->route('success.page');
     }
@@ -280,22 +292,17 @@ class PayIrController extends Controller
         session()->flash('success', __('successful payment'));
         Session::forget('request');
         Session::forget('paymentFor');
-        Session::forget('payir_trans_id');
+        Session::forget('payir_token');
         Session::forget('payir_order_id');
         return redirect()->route('success.page');
     }
 
     /**
-     * Refund a payment
-     *
-     * @param string $transId The transId from original payment
-     * @param float|null $amount Amount to refund (null = full refund)
-     * @param string $reason Reason for refund
-     * @return array Result with success status and message
+     * Refund a payment (Pay.ir v2)
      */
-    public function refund($transId, $amount = null, $reason = 'Refund requested')
+    public function refund($token, $amount = null, $reason = 'Refund requested')
     {
-        $apiUrl = 'https://pay.ir/payment/refund';
+        $apiUrl = 'https://pay.ir/pg/refund';
 
         $gateway = UserPaymentGateway::whereKeyword('payir')->where('user_id', getUser()->id)->first();
         $gatewayInfo = json_decode($gateway->information, true);
@@ -311,7 +318,7 @@ class PayIrController extends Controller
 
         $payload = [
             'api' => $apiKey,
-            'transId' => $transId,
+            'token' => $token,
         ];
 
         if ($amount !== null) {
@@ -319,41 +326,49 @@ class PayIrController extends Controller
         }
 
         try {
+            $endpoint = $sandbox ? 'https://pay.ir/pg/sandbox/refund' : $apiUrl;
             $response = Http::timeout(30)->withHeaders([
                 'Content-Type' => 'application/json',
-            ])->post($sandbox ? 'https://pay.ir/payment/sandbox/refund' : $apiUrl, $payload);
+            ])->post($endpoint, $payload);
 
             $result = $response->json();
+
+            Log::channel('payment')->info('Pay.ir refund request (appointment, v2)', [
+                'token' => $token,
+                'amount' => $amount,
+                'status' => $result['status'] ?? 'unknown',
+            ]);
 
             if ($response->successful() && isset($result['status']) && $result['status'] == 1) {
                 return [
                     'success' => true,
                     'message' => 'بازپرداخت با موفقیت انجام شد.',
-                    'ref_id' => $transId,
-                ];
-            } else {
-                $error_message = $result['errorMessage'] ?? 'خطa در بازپرداخت';
-                return [
-                    'success' => false,
-                    'message' => $error_message,
+                    'ref_id' => $token,
                 ];
             }
-        } catch (\Exception $e) {
+
+            $error_message = $result['errorMessage'] ?? 'خطا در بازپرداخت';
             return [
                 'success' => false,
-                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
+                'message' => $error_message,
+            ];
+        } catch (\Exception $e) {
+            Log::channel('payment')->error('Pay.ir refund error (appointment)', [
+                'token' => $token,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
 
     /**
-     * Void a payment (cancel before settlement)
-     *
-     * @param string $transId The transId from original payment
-     * @return array Result with success status and message
+     * Void a payment
      */
-    public function void($transId)
+    public function void($token)
     {
-        return $this->refund($transId, null, 'Payment voided');
+        return $this->refund($token, null, 'Payment voided');
     }
 }

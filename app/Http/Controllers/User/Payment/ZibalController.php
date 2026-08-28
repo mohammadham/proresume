@@ -7,7 +7,6 @@ use App\Http\Helpers\MegaMailer;
 use App\Models\Package;
 use App\Models\Transaction;
 use App\Models\User\UserPaymentGateway;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Http;
@@ -17,6 +16,7 @@ use App\Models\Language;
 use App\Models\User\BasicSetting;
 use App\Http\Helpers\UserPermissionHelper;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class ZibalController extends Controller
 {
@@ -35,39 +35,57 @@ class ZibalController extends Controller
             $paydata = $data->convertAutoData();
             $this->merchant_id = $paydata['merchant_id'] ?? '';
             $this->sandbox_mode = $paydata['sandbox_status'] ?? 1;
-            $this->description = $paydata['description'] ?? 'پرداخت اشتراک';
+            $this->description = $paydata['text'] ?? 'پرداخت اشتراک';
             $this->callback_url = $paydata['callback_url'] ?? route('customer.appointment.zibal.notify');
         }
     }
 
-    public function paymentProcess(Request $request, $_amount, $_title, $_success_url, $_cancel_url)
+    public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)
     {
         $title = $_title;
         $price = $_amount;
-        $price = round($price);
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
+
+        $requestData = is_array($request) ? $request : $request->all();
+        $phone = is_array($request) ? ($request['phone'] ?? '') : ($request->phone ?? '');
+        $ip = is_array($request) ? request()->ip() : $request->ip();
+
+        // P1-2: Base currency check + convert Toman → Rial (Zibal requires Rial)
+        $currentLang = session()->has('lang')
+            ? Language::where('code', session()->get('lang'))->first()
+            : Language::where('is_default', 1)->first();
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
+        if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
+            return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
+        }
+
+        $amountInRial = (int) round($baseCurrency === 'IRT' ? $price * 10 : $price);
+
+        // P1-3: Min amount check for Zibal (1,000 Rial)
+        if ($amountInRial < 1000) {
+            return redirect($cancel_url)->with('error', 'حداقل مبلغ قابل پرداخت ۱،۰۰۰ ریال است.');
+        }
 
         // Generate unique order ID for idempotency
         $orderId = 'ZIBAL_' . Str::uuid()->toString();
 
         // Store request data in session for later use
-        Session::put('request', $request->all());
+        Session::put('request', $requestData);
         Session::put('amount', $_amount);
         Session::put('paymentFor', Session::get('paymentFor'));
         Session::put('zibal_order_id', $orderId);
 
         // Prepare data for Zibal API
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/request'
-            : 'https://gateway.zibal.ir/v1/request';
+        $merchant = $this->sandbox_mode == 1 ? 'zibal' : $this->merchant_id;
+        $api_url = 'https://gateway.zibal.ir/v1/request';
 
         $payload = [
-            'merchant' => $this->merchant_id,
-            'amount' => $price, // Amount in Tomans
+            'merchant' => $merchant,
+            'amount' => $amountInRial,
             'callbackUrl' => $this->callback_url,
             'description' => $this->description,
-            'mobile' => $request->phone ?? '',
+            'mobile' => $phone,
             'orderId' => $orderId,
         ];
 
@@ -75,25 +93,30 @@ class ZibalController extends Controller
             $response = Http::timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
+            Log::channel('payment')->info('Zibal payment initiation (vendor)', [
+                'order_id' => $orderId,
+                'amount' => $amountInRial,
+                'sandbox' => $this->sandbox_mode,
+                'result' => $result['result'] ?? 'unknown',
+                'has_track_id' => isset($result['trackId']),
+            ]);
+
             if (isset($result['result']) && $result['result'] == 100) {
                 $trackId = $result['trackId'];
                 Session::put('zibal_track_id', $trackId);
 
-                // Save transaction with idempotency key
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => UserPaymentGateway::whereKeyword('zibal')->where('user_id', getUser()->id)->value('id'),
-                    'amount' => $price,
+                    'amount' => $amountInRial,
                     'transaction_id' => $trackId,
                     'order_id' => $orderId,
                     'status' => 'pending',
                     'currency' => 'IRR',
-                    'ip' => $request->ip(),
+                    'ip' => $ip,
                 ]);
 
-                $payment_url = $this->sandbox_mode == 1
-                    ? 'https://sandbox.zibal.ir/start/' . $trackId
-                    : 'https://gateway.zibal.ir/start/' . $trackId;
+                $payment_url = 'https://gateway.zibal.ir/start/' . $trackId;
 
                 return Redirect::away($payment_url);
             } else {
@@ -101,19 +124,23 @@ class ZibalController extends Controller
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
-            return redirect($cancel_url)->with('error', 'خطا در اتصال به درگاه پرداخت: ' . $e->getMessage());
+            Log::channel('payment')->error('Zibal payment initiation error (vendor)', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+            ]);
+            return redirect($cancel_url)->with('error', 'خطا در پرداخت. لطفاً مجدداً تلاش کنید.');
         }
     }
 
-    public function successPayment(Request $request)
+    public function successPayment($request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
         $be = $currentLang->basic_extended;
         $bs = $currentLang->basic_setting;
 
-        $trackId = $request->get('trackId');
-        $status = $request->get('status');
+        $trackId = is_array($request) ? ($request['trackId'] ?? '') : $request->get('trackId');
+        $status = is_array($request) ? ($request['status'] ?? '') : $request->get('status');
         $cancel_url = route('customer.appointment.zibal.cancel');
 
         // Find transaction by trackId (stored as transaction_id)
@@ -225,12 +252,13 @@ class ZibalController extends Controller
                     return redirect()->route('success.page');
                 }
             } else {
-                $error_message = $result['message'] ?? 'خطa در تایید پرداخت';
+                $error_message = $result['message'] ?? 'خطا در تایید پرداخت';
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
             $transaction->update(['status' => 'failed']);
-            return redirect($cancel_url)->with('error', 'خطa در تایید پرداخت: ' . $e->getMessage());
+            Log::channel('payment')->error('Zibal verify error (vendor)', ['trackId' => $trackId, 'error' => $e->getMessage()]);
+            return redirect($cancel_url)->with('error', 'خطا در تایید پرداخت.');
         }
 
         return redirect($cancel_url);
@@ -275,17 +303,24 @@ class ZibalController extends Controller
 
     /**
      * Refund a payment
-     *
-     * @param string $trackId The trackId from original payment
-     * @param float|null $amount Amount to refund (null = full refund)
-     * @param string $reason Reason for refund
-     * @return array Result with success status and message
      */
     public function refund($trackId, $amount = null, $reason = 'Refund requested')
     {
         $api_url = $this->sandbox_mode == 1
             ? 'https://sandbox.zibal.ir/v1/refund'
             : 'https://gateway.zibal.ir/v1/refund';
+
+        $gateway = UserPaymentGateway::whereKeyword('zibal')->where('user_id', getUser()->id)->first();
+        $gatewayInfo = json_decode($gateway->information, true);
+        $apiKey = $gatewayInfo['api_key'] ?? '';
+        $sandbox = $gatewayInfo['sandbox_status'] ?? 0;
+
+        if (!$apiKey) {
+            return [
+                'success' => false,
+                'message' => 'درگاه Zibal تنظیم نشده است.',
+            ];
+        }
 
         $payload = [
             'merchant' => $this->merchant_id,
@@ -307,25 +342,26 @@ class ZibalController extends Controller
                     'ref_id' => $result['refNumber'] ?? null,
                 ];
             } else {
-                $error_message = $result['message'] ?? 'خطa در بازپرداخت';
+                $error_message = $result['message'] ?? 'خطا در بازپرداخت';
                 return [
                     'success' => false,
                     'message' => $error_message,
                 ];
             }
         } catch (\Exception $e) {
+            Log::channel('payment')->error('Zibal refund error (vendor)', [
+                'trackId' => $trackId,
+                'error' => $e->getMessage(),
+            ]);
             return [
                 'success' => false,
-                'message' => 'خطa در بازپرداخت: ' . $e->getMessage(),
+                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
             ];
         }
     }
 
     /**
-     * Void a payment (cancel before settlement)
-     *
-     * @param string $trackId The trackId from original payment
-     * @return array Result with success status and message
+     * Void a payment
      */
     public function void($trackId)
     {

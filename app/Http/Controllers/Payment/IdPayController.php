@@ -23,6 +23,12 @@ class IdPayController extends Controller
         $this->gateway = PaymentGateway::where('keyword', 'idpay')->first();
     }
 
+    public function paymentProcess(Request $request, $_amount, $_title, $_success_url, $_cancel_url)
+    {
+        $request->merge(['price' => $_amount]);
+        return $this->payment($request);
+    }
+
     public function payment(Request $request)
     {
         $request->validate([

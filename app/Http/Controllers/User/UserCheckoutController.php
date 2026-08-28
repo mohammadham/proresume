@@ -35,6 +35,11 @@ use App\Http\Controllers\Payment\FlutterWaveController;
 use App\Http\Controllers\Payment\MercadopagoController;
 use App\Http\Controllers\Payment\AuthorizenetController;
 use App\Http\Controllers\Payment\PerfectMoneyController;
+use App\Http\Controllers\Payment\ZarinPalController;
+use App\Http\Controllers\Payment\ZibalController;
+use App\Http\Controllers\Payment\IdPayController;
+use App\Http\Controllers\Payment\NextPayController;
+use App\Http\Controllers\Payment\PayIrController;
 
 class UserCheckoutController extends Controller
 {
@@ -267,7 +272,7 @@ class UserCheckoutController extends Controller
         } elseif ($request->payment_method == 'Xendit') {
             $available_currency = ['IDR', 'PHP', 'USD', 'SGD', 'MYR'];
             if (!in_array($be->base_currency_text, $available_currency)) {
-                session()->flash('warning', $be->base_currency_text . ' ' . __('is not allowed for Xendit') . '.');
+                session()->flash('warning', $be->base_currency_text . ' ' . __('is not allowed for') . ' ' . __('Xendit'));
                 return back()->withInput($request->all());
             }
 
@@ -276,6 +281,36 @@ class UserCheckoutController extends Controller
             $cancel_url = route('membership.xendit.cancel');
             $payment = new XenditController();
             return $payment->paymentProcess($request, $amount, $success_url, $cancel_url, $title, $be);
+        } elseif ($request->payment_method == 'ZarinPal') {
+            $amount = $request->price;
+            $success_url = route('membership.zarinpal.success');
+            $cancel_url = route('membership.zarinpal.cancel');
+            $payment = new ZarinPalController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Zibal') {
+            $amount = $request->price;
+            $success_url = route('membership.zibal.success');
+            $cancel_url = route('membership.zibal.cancel');
+            $payment = new ZibalController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'IdPay') {
+            $amount = $request->price;
+            $success_url = route('membership.idpay.success');
+            $cancel_url = route('membership.idpay.cancel');
+            $payment = new IdPayController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'NextPay') {
+            $amount = $request->price;
+            $success_url = route('membership.nextpay.success');
+            $cancel_url = route('membership.nextpay.cancel');
+            $payment = new NextPayController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Pay.ir') {
+            $amount = $request->price;
+            $success_url = route('membership.payir.success');
+            $cancel_url = route('membership.payir.cancel');
+            $payment = new PayIrController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
         } elseif (in_array($request->payment_method, $offline_payment_gateways)) {
             $request['status'] = '0';
             if ($request->hasFile('receipt')) {
