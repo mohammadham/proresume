@@ -49,22 +49,20 @@ class ZarinPalController extends Controller
         $cancel_url = $_cancel_url;
         $success_url = $_success_url;
 
-        // P1-2: Base currency check. ZarinPal accepts both IRR and IRT natively.
+        // P1-2: Base currency check (ZarinPal V4 requires amount in Rial)
         $currentLang = session()->has('lang')
             ? Language::where('code', session()->get('lang'))->first()
             : Language::where('is_default', 1)->first();
-        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRT');
+        $baseCurrency = strtoupper($currentLang->basic_extended->base_currency_text ?? 'IRR');
         if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
             return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
         }
 
-        // ZarinPal supports IRT natively; if base is IRR, keep as IRR (send currency=IRR).
-        $price = (int) round($price);
-        $currency = $baseCurrency;
+        // ZarinPal V4 expects amount in Rial. Convert Toman → Rial if needed.
+        $amountInRial = (int) round($baseCurrency === 'IRT' ? $price * 10 : $price);
 
-        // P1-3: Min amount check for ZarinPal (1,000 Rial = 100 Toman)
-        $minAmount = $currency === 'IRT' ? 100 : 1000;
-        if ($price < $minAmount) {
+        // P1-3: Min amount check for ZarinPal (1,000 Rial)
+        if ($amountInRial < 1000) {
             return redirect($cancel_url)->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
         }
 
@@ -73,25 +71,22 @@ class ZarinPalController extends Controller
 
         // Store request data in session for later use
         Session::put('request', $request->all());
-        Session::put('amount', $_amount);
-        Session::put('paymentFor', Session::get('paymentFor'));
+        Session::put('amount', $amountInRial);
         Session::put('zarinpal_order_id', $orderId);
 
-        // Prepare data for ZarinPal API
-        $api_url = $this->sandbox_mode == 1 
+        // Prepare data for ZarinPal API (V4 expects amount in Rial)
+        $api_url = $this->sandbox_mode == 1
             ? 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
             : 'https://api.zarinpal.com/pg/v4/payment/request.json';
 
         $payload = [
             'merchant_id' => $this->merchant_id,
-            'amount' => $price,
-            'currency' => $currency,
+            'amount' => $amountInRial,
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
                 'mobile' => $request->phone ?? '',
                 'email' => $request->email ?? '',
-                'order_id' => $orderId
             ]
         ];
 
@@ -114,11 +109,11 @@ class ZarinPalController extends Controller
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => PaymentGateway::whereKeyword('zarinpal')->value('id'),
-                    'amount' => $price,
+                    'amount' => $amountInRial,
                     'transaction_id' => $authority,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => $currency,
+                    'currency' => 'IRR',
                     'ip' => $request->ip(),
                 ]);
 
@@ -132,20 +127,19 @@ class ZarinPalController extends Controller
             } else {
                 $error_code = $result['data']['code'] ?? 0;
                 $error_messages = [
-                    -9 => 'خطای اعتبارسنجی داده‌ها',
-                    -10 => 'مرچنت کد یافت نشد',
+                    -9 => 'خطای اعتبارسنجی',
+                    -10 => 'مرچنت کد یافت نشد یا آی‌پی صحیح نیست',
                     -11 => 'مرچنت غیرفعال است',
-                    -12 => 'مبلغ نامعتبر است',
-                    -13 => 'مبلغ کمتر از حداقل مجاز',
-                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
-                    -15 => 'تراکنش تکراری',
-                    -16 => 'خطای داخلی',
-                    -17 => 'IP مسدود شده',
-                    -18 => 'مرچنت تایید نشده',
-                    -19 => 'Callback URL نامعتبر',
-                    -20 => 'Description نامعتبر',
-                    -21 => 'موبایل نامعتبر',
-                    -22 => 'ایمیل نامعتبر',
+                    -12 => 'تلاش بیش از حد در یک بازه زمانی کوتاه',
+                    -15 => 'ترمینال به حالت تعلیق در آمده',
+                    -16 => 'سطح تایید پذیرنده کافی نیست',
+                    -30 => 'اجازه تسویه اشتراکی شناور ندارید',
+                    -31 => 'حساب بانکی تسویه اضافه کنید',
+                    -32 => 'مبلغ تسهیم نامعتبر',
+                    -33 => 'درصدهای تسهیم اشتراکی اشتباه است',
+                    -34 => 'مجموع تسهیمات بیش از کل است',
+                    -35 => 'تعداد دریافت‌کنندگان بیش از حد',
+                    -40 => 'پارامترهای اضافی نامعتبر',
                 ];
                 $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در اتصال به درگاه پرداخت');
 
@@ -213,7 +207,6 @@ class ZarinPalController extends Controller
                 'merchant_id' => $this->merchant_id,
                 'authority' => $authority,
                 'amount' => $transaction->amount,
-                'currency' => $transaction->currency ?? 'IRT',
             ];
 
             try {
@@ -311,35 +304,26 @@ class ZarinPalController extends Controller
                 // $transaction->update(['status' => 'failed']);
                 
                 $error_messages = [
-                    -9 => 'خطای اعتبارسنجی داده‌ها',
-                    -10 => 'مرچنت کد یافت نشد',
+                    -9 => 'خطای اعتبارسنجی',
+                    -10 => 'مرچنت کد یافت نشد یا آی‌پی صحیح نیست',
                     -11 => 'مرچنت غیرفعال است',
-                    -12 => 'مبلغ نامعتبر است',
-                    -13 => 'مبلغ کمتر از حداقل مجاز',
-                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
-                    -15 => 'تراکنش تکراری',
-                    -16 => 'خطای داخلی',
-                    -17 => 'IP مسدود شده',
-                    -18 => 'مرچنت تایید نشده',
-                    -19 => 'Callback URL نامعتبر',
-                    -20 => 'Description نامعتبر',
-                    -21 => 'موبایل نامعتبر',
-                    -22 => 'ایمیل نامعتبر',
-                    -30 => 'تراکنش یافت نشد',
-                    -31 => 'تراکنش تایید شده است',
-                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
-                    -33 => 'تراکنش انقضا یافته',
-                    -34 => 'تراکنش لغو شده',
-                    -35 => 'تراکنش نامعتبر',
-                    -36 => 'تراکنش تکراری',
-                    -40 => 'خطای سیستمی',
+                    -12 => 'تلاش بیش از حد در یک بازه زمانی کوتاه',
+                    -15 => 'ترمینال به حالت تعلیق در آمده',
+                    -16 => 'سطح تایید پذیرنده کافی نیست',
+                    -30 => 'اجازه تسویه اشتراکی شناور ندارید',
+                    -31 => 'حساب بانکی تسویه اضافه کنید',
+                    -32 => 'مبلغ تسهیم نامعتبر',
+                    -33 => 'درصدهای تسهیم اشتراکی اشتباه است',
+                    -34 => 'مجموع تسهیمات بیش از کل است',
+                    -35 => 'تعداد دریافت‌کنندگان بیش از حد',
+                    -40 => 'پارامترهای اضافی نامعتبر',
                     -41 => 'مرچنت تایید نشده',
                     -42 => 'تراکنش در انتظار تایید',
-                    -50 => 'خطای بانک',
-                    -51 => 'بانک در دسترس نیست',
-                    -52 => 'خطای شبکه',
-                    -53 => 'مبلغ کمتر از حداقل',
-                    -54 => 'مبلغ بیشتر از حداکثر',
+                    -50 => 'مبلغ پرداخت شده با مقدار در وریفای متفاوت است',
+                    -51 => 'پرداخت ناموفق',
+                    -52 => 'خطای غیرمنتظره',
+                    -53 => 'اتوریتی برای این مرچنت کد نیست',
+                    -54 => 'اتوریتی نامعتبر',
                 ];
                 $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در تایید پرداخت');
 
@@ -370,8 +354,6 @@ class ZarinPalController extends Controller
         ]);
         return redirect($cancel_url)->with('error', $error_message);
     }
-
-    return redirect($cancel_url);
     }
 
     public function cancelPayment()
@@ -420,99 +402,6 @@ class ZarinPalController extends Controller
         // (not merchant_id + authority). This endpoint call will fail with the current signature.
         // Until OAuth is wired up, throw so the UI does not silently pretend success.
         throw new \RuntimeException('ZarinPal refund is not configured. Please contact support.');
-
-        // Unreachable — kept for future OAuth-based refund implementation.
-        // phpcs:disable
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zarinpal.com/pg/v4/payment/refund.json'
-            : 'https://api.zarinpal.com/pg/v4/payment/refund.json';
-
-        $payload = [
-            'merchant_id' => $this->merchant_id,
-            'authority' => $authority,
-            // 'currency' => $currency,
-        ];
-
-        if ($amount !== null) {
-            $payload['amount'] = $amount;
-        }
-
-        try {
-            $response = Http::timeout(30)->post($api_url, $payload);
-            $result = $response->json();
-
-            Log::channel('payment')->info('ZarinPal refund request (admin)', [
-                'authority' => $authority,
-                'amount' => $amount,
-                'status' => $result['data']['code'] ?? 'unknown',
-                'ref_id' => $result['data']['ref_id'] ?? null,
-            ]);
-
-            if (isset($result['data']['code']) && $result['data']['code'] == 100) {
-                return [
-                    'success' => true,
-                    'message' => 'بازپرداخت با موفقیت انجام شد.',
-                    'ref_id' => $result['data']['ref_id'] ?? null,
-                ];
-            } else {
-                $error_code = $result['data']['code'] ?? 0;
-                $error_messages = [
-                    -9 => 'خطای اعتبارسنجی داده‌ها',
-                    -10 => 'مرچنت کد یافت نشد',
-                    -11 => 'مرچنت غیرفعال است',
-                    -12 => 'مبلغ نامعتبر است',
-                    -13 => 'مبلغ کمتر از حداقل مجاز',
-                    -14 => 'مبلغ بیشتر از حداکثر مجاز',
-                    -15 => 'تراکنش تکراری',
-                    -16 => 'خطای داخلی',
-                    -17 => 'IP مسدود شده',
-                    -18 => 'مرچنت تایید نشده',
-                    -19 => 'Callback URL نامعتبر',
-                    -20 => 'Description نامعتبر',
-                    -21 => 'موبایل نامعتبر',
-                    -22 => 'ایمیل نامعتبر',
-                    -30 => 'تراکنش یافت نشد',
-                    -31 => 'تراکنش تایید شده است',
-                    -32 => 'مبلغ تایید شده با مبلغ درخواستی متفاوت است',
-                    -33 => 'تراکنش انقضا یافته',
-                    -34 => 'تراکنش لغو شده',
-                    -35 => 'تراکنش نامعتبر',
-                    -36 => 'تراکنش تکراری',
-                    -40 => 'خطای سیستمی',
-                    -41 => 'مرچنت تایید نشده',
-                    -42 => 'تراکنش در انتظار تایید',
-                    -50 => 'خطای بانک',
-                    -51 => 'بانک در دسترس نیست',
-                    -52 => 'خطای شبکه',
-                    -53 => 'مبلغ کمتر از حداقل',
-                    -54 => 'مبلغ بیشتر از حداکثر',
-                    -60 => 'بازپرداخت امکان‌پذیر نیست',
-                    -61 => 'مبلغ بازپرداخت بیشتر از مبلغ تراکنش',
-                ];
-                $error_message = $error_messages[$error_code] ?? ($result['errors']['message'] ?? 'خطا در بازپرداخت');
-
-                Log::channel('payment')->warning('ZarinPal refund failed (admin)', [
-                    'authority' => $authority,
-                    'error_code' => $error_code,
-                    'error_message' => $error_message,
-                ]);
-
-                return [
-                    'success' => false,
-                    'message' => $error_message,
-                ];
-            }
-        } catch (\Exception $e) {
-            Log::channel('payment')->error('ZarinPal refund error (admin)', [
-                'authority' => $authority,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return [
-                'success' => false,
-                'message' => 'خطا در بازپرداخت. لطفاً مجدداً تلاش کنید.',
-            ];
-        }
     }
 
     /**

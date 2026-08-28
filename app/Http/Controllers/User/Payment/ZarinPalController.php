@@ -54,7 +54,7 @@ class ZarinPalController extends Controller
         $email = is_array($request) ? ($request['email'] ?? '') : ($request->email ?? '');
         $ip = is_array($request) ? request()->ip() : $request->ip();
 
-        // P1-2: Base currency check (ZarinPal supports both IRR and IRT natively)
+        // P1-2: Base currency check (ZarinPal V4 requires amount in Rial)
         $currentLang = session()->has('lang')
             ? Language::where('code', session()->get('lang'))->first()
             : Language::where('is_default', 1)->first();
@@ -62,18 +62,18 @@ class ZarinPalController extends Controller
         if (!in_array($baseCurrency, ['IRR', 'IRT'])) {
             return redirect($cancel_url)->with('error', 'ارز پایه سایت با درگاه ایرانی سازگار نیست.');
         }
-        $price = (int) round($price);
-        $currency = $baseCurrency;
 
-        // P1-3: Min amount
-        $minAmount = $currency === 'IRT' ? 100 : 1000;
-        if ($price < $minAmount) {
+        // ZarinPal V4 expects amount in Rial. Convert Toman → Rial if needed.
+        $amountInRial = (int) round($baseCurrency === 'IRT' ? $price * 10 : $price);
+
+        // P1-3: Min amount (1,000 Rial)
+        if ($amountInRial < 1000) {
             return redirect($cancel_url)->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
         }
 
         $orderId = 'ZARINPAL_' . Str::uuid()->toString();
         Session::put('request', $requestData);
-        Session::put('amount', $_amount);
+        Session::put('amount', $amountInRial);
         Session::put('paymentFor', Session::get('paymentFor'));
         Session::put('zarinpal_order_id', $orderId);
 
@@ -83,14 +83,12 @@ class ZarinPalController extends Controller
 
         $payload = [
             'merchant_id' => $this->merchant_id,
-            'amount' => $price,
-            'currency' => $currency,
+            'amount' => $amountInRial,
             'callback_url' => $this->callback_url,
             'description' => $this->description,
             'metadata' => [
                 'mobile' => $phone,
                 'email' => $email,
-                'order_id' => $orderId,
             ],
         ];
 
@@ -110,11 +108,11 @@ class ZarinPalController extends Controller
                 Transaction::create([
                     'user_id' => auth()->id() ?? null,
                     'gateway_id' => UserPaymentGateway::whereKeyword('zarinpal')->where('user_id', getUser()->id)->value('id'),
-                    'amount' => $price,
+                    'amount' => $amountInRial,
                     'transaction_id' => $authority,
                     'order_id' => $orderId,
                     'status' => 'pending',
-                    'currency' => $currency,
+                    'currency' => 'IRR',
                     'ip' => $ip,
                 ]);
 
@@ -179,7 +177,6 @@ class ZarinPalController extends Controller
         $payload = [
             'merchant_id' => $this->merchant_id,
             'amount' => $transaction->amount,
-            'currency' => $transaction->currency ?? 'IRT',
             'authority' => $authority
         ];
 

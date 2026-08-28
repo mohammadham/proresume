@@ -322,7 +322,6 @@ class ZibalController extends Controller
         }
     }
 
-    // Helper method to generate invoice
     /**
      * Refund a payment
      */
