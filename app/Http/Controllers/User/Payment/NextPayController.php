@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
 
 class NextPayController extends Controller
 {
@@ -128,12 +130,30 @@ class NextPayController extends Controller
         $session_trans_id = Session::get('nextpay_trans_id');
         $session_order_id = Session::get('nextpay_order_id');
 
-        if (!$trans_id || $trans_id !== $session_trans_id) {
-            Log::channel('payment')->warning('NextPay callback: trans_id mismatch', [
-                'request_trans_id' => $trans_id,
-                'session_trans_id' => $session_trans_id,
-            ]);
-            return redirect($cancel_url)->with('error', 'شناسه تراکنش نامعتبر است.');
+        // P1-5: Idempotency - lockForUpdate to prevent race conditions
+        try {
+            $transaction = DB::transaction(function () use ($trans_id) {
+                $t = Transaction::where('transaction_id', $trans_id)
+                    ->whereHas('gateway', function($q) { $q->where('keyword', 'nextpay'); })
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('NextPay callback: transaction not found', ['trans_id' => $trans_id]);
+                return redirect($cancel_url)->with('error', 'شناسه تراکنش نامعتبر است.');
+            }
+            Log::channel('payment')->info('NextPay callback: duplicate/already processed', ['trans_id' => $trans_id, 'state' => $msg]);
+            return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '0') {
@@ -158,6 +178,19 @@ class NextPayController extends Controller
 
                 if (isset($result['code']) && $result['code'] == 0) {
                     $transaction_id = 'NEXTPAY_' . $trans_id;
+
+                    // P1-4: Amount mismatch guard
+                    $verifiedAmount = isset($result['amount']) ? (int) $result['amount'] : null;
+                    $expectedAmount = (int) Session::get('amount');
+                    if ($verifiedAmount !== null && $verifiedAmount !== $expectedAmount) {
+                        Log::channel('payment')->warning('NextPay amount mismatch', [
+                            'trans_id' => $trans_id,
+                            'expected' => $expectedAmount,
+                            'received' => $verifiedAmount,
+                        ]);
+                        return redirect($cancel_url)->with('error', 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.');
+                    }
+
                     $transaction_details = json_encode([
                         'trans_id' => $trans_id,
                         'order_id' => $session_order_id,
@@ -221,12 +254,6 @@ class NextPayController extends Controller
                 ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
                 ->withInput($requestData);
         }
-    }
-
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
     }
 
     private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)

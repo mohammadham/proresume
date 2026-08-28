@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Redirect;
 use App\Models\Language;
 use App\Models\User\BasicSetting;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
 
 class PayIrController extends Controller
 {
@@ -131,12 +133,30 @@ class PayIrController extends Controller
         $session_token = Session::get('payir_token');
         $session_order_id = Session::get('payir_order_id');
 
-        if (!$token || $token !== $session_token) {
-            Log::channel('payment')->warning('Pay.ir callback: token mismatch', [
-                'request_token' => $token,
-                'session_token' => $session_token,
-            ]);
-            return redirect($cancel_url)->with('error', 'شناسه تراکنش نامعتبر است.');
+        // P1-5: Idempotency - lockForUpdate to prevent race conditions
+        try {
+            $transaction = DB::transaction(function () use ($token) {
+                $t = Transaction::where('transaction_id', $token)
+                    ->whereHas('gateway', function($q) { $q->where('keyword', 'payir'); })
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('Pay.ir callback: transaction not found', ['token' => $token]);
+                return redirect($cancel_url)->with('error', 'شناسه تراکنش نامعتبر است.');
+            }
+            Log::channel('payment')->info('Pay.ir callback: duplicate/already processed', ['token' => $token, 'state' => $msg]);
+            return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '1' || $status == 1) {
@@ -162,6 +182,19 @@ class PayIrController extends Controller
 
                 if (isset($result['status']) && $result['status'] == 1) {
                     $transaction_id = 'PAYIR_' . $token;
+
+                    // P1-4: Amount mismatch guard
+                    $verifiedAmount = isset($result['amount']) ? (int) $result['amount'] : null;
+                    $expectedAmount = (int) Session::get('amount');
+                    if ($verifiedAmount !== null && $verifiedAmount !== $expectedAmount) {
+                        Log::channel('payment')->warning('Pay.ir amount mismatch', [
+                            'token' => $token,
+                            'expected' => $expectedAmount,
+                            'received' => $verifiedAmount,
+                        ]);
+                        return redirect($cancel_url)->with('error', 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.');
+                    }
+
                     $transaction_details = json_encode([
                         'token' => $token,
                         'order_id' => $session_order_id,
@@ -226,12 +259,6 @@ class PayIrController extends Controller
                 ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id'] ?? 1])
                 ->withInput($requestData);
         }
-    }
-
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
     }
 
     private function handleMembershipSuccess($user, $requestData, $transaction_id, $transaction_details, $amount, $be, $bs)

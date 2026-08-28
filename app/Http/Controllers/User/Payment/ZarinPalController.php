@@ -310,13 +310,6 @@ class ZarinPalController extends Controller
         }
     }
 
-    // Helper method to generate invoice
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
-    }
-
     /**
      * Refund a payment
      *

@@ -17,6 +17,7 @@ use App\Models\User\BasicSetting;
 use App\Http\Helpers\UserPermissionHelper;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class ZibalController extends Controller
 {
@@ -143,13 +144,30 @@ class ZibalController extends Controller
         $status = is_array($request) ? ($request['status'] ?? '') : $request->get('status');
         $cancel_url = route('customer.appointment.zibal.cancel');
 
-        // Find transaction by trackId (stored as transaction_id)
-        $transaction = Transaction::where('transaction_id', $trackId)
-            ->whereHas('gateway', function($q) { $q->where('keyword', 'zibal'); })
-            ->first();
-
-        if (!$transaction) {
-            return redirect($cancel_url)->with('error', 'کد مرجع پرداخت معتبر نیست');
+        // P1-5: Idempotency - lockForUpdate to prevent race conditions
+        try {
+            $transaction = DB::transaction(function () use ($trackId) {
+                $t = Transaction::where('transaction_id', $trackId)
+                    ->whereHas('gateway', function($q) { $q->where('keyword', 'zibal'); })
+                    ->lockForUpdate()
+                    ->first();
+                if (!$t) {
+                    throw new \DomainException('TRANSACTION_NOT_FOUND');
+                }
+                if ($t->status !== 'pending') {
+                    throw new \DomainException('ALREADY_PROCESSED:' . $t->status);
+                }
+                $t->update(['status' => 'processing']);
+                return $t;
+            });
+        } catch (\DomainException $e) {
+            $msg = $e->getMessage();
+            if ($msg === 'TRANSACTION_NOT_FOUND') {
+                Log::channel('payment')->warning('Zibal callback: transaction not found', ['trackId' => $trackId]);
+                return redirect($cancel_url)->with('error', 'کد مرجع پرداخت معتبر نیست');
+            }
+            Log::channel('payment')->info('Zibal callback: duplicate/already processed', ['trackId' => $trackId, 'state' => $msg]);
+            return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         // Check if payment was successful on Zibal side
@@ -158,13 +176,11 @@ class ZibalController extends Controller
             return redirect($cancel_url)->with('error', 'پرداخت توسط کاربر لغو شد یا ناموفق بود');
         }
 
-        // Verify payment with Zibal API
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/verify'
-            : 'https://gateway.zibal.ir/v1/verify';
+        // Verify payment with Zibal API - always use production URL
+        $api_url = 'https://gateway.zibal.ir/v1/verify';
 
         $payload = [
-            'merchant' => $this->merchant_id,
+            'merchant' => $this->sandbox_mode == 1 ? 'zibal' : $this->merchant_id,
             'trackId' => $trackId,
         ];
 
@@ -172,8 +188,11 @@ class ZibalController extends Controller
             $response = Http::timeout(30)->post($api_url, $payload);
             $result = $response->json();
 
+            // P1-4: Amount mismatch guard
+            $amountOk = !isset($result['amount']) || (int) $result['amount'] === (int) $transaction->amount;
+
             // Code 100 = Success, 201 = Already verified
-            if (isset($result['result']) && in_array($result['result'], [100, 201])) {
+            if (isset($result['result']) && in_array($result['result'], [100, 201]) && $amountOk) {
                 $ref_id = $result['refNumber'] ?? '';
                 $paymentFor = Session::get('paymentFor');
                 $package = Package::find($requestData['package_id']);
@@ -252,7 +271,16 @@ class ZibalController extends Controller
                     return redirect()->route('success.page');
                 }
             } else {
-                $error_message = $result['message'] ?? 'خطا در تایید پرداخت';
+                $transaction->update(['status' => 'failed']);
+                $error_message = !$amountOk
+                    ? 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.'
+                    : ($result['message'] ?? 'خطا در تایید پرداخت');
+                Log::channel('payment')->warning('Zibal verify failed (vendor)', [
+                    'trackId' => $trackId,
+                    'result' => $result['result'] ?? null,
+                    'expected_amount' => $transaction->amount,
+                    'received_amount' => $result['amount'] ?? null,
+                ]);
                 return redirect($cancel_url)->with('error', $error_message);
             }
         } catch (\Exception $e) {
@@ -295,20 +323,12 @@ class ZibalController extends Controller
     }
 
     // Helper method to generate invoice
-    private function makeInvoice($requestData, $type, $user, $password, $amount, $payment_method, $phone, $currency_symbol_position, $currency_symbol, $currency_text, $transaction_id, $package_title)
-    {
-        $file_name = 'invoice_' . $transaction_id . '.pdf';
-        return $file_name;
-    }
-
     /**
      * Refund a payment
      */
     public function refund($trackId, $amount = null, $reason = 'Refund requested')
     {
-        $api_url = $this->sandbox_mode == 1
-            ? 'https://sandbox.zibal.ir/v1/refund'
-            : 'https://gateway.zibal.ir/v1/refund';
+        $api_url = 'https://gateway.zibal.ir/v1/refund';
 
         $gateway = UserPaymentGateway::whereKeyword('zibal')->where('user_id', getUser()->id)->first();
         $gatewayInfo = json_decode($gateway->information, true);
