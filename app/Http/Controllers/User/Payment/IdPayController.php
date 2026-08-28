@@ -107,6 +107,18 @@ class IdPayController extends Controller
                 Session::put('idpay_payment_id', $payment_id);
                 Session::put('idpay_order_id', $order_id);
 
+                Transaction::create([
+                    'user_id' => auth()->id() ?? null,
+                    'gateway_id' => UserPaymentGateway::whereKeyword('idpay')->where('user_id', getUser()->id)->value('id'),
+                    'amount' => $amount,
+                    'transaction_id' => $payment_id,
+                    'order_id' => $order_id,
+                    'status' => 'pending',
+                    'currency' => 'IRR',
+                    'ip' => request()->ip(),
+                    'payment_url' => $payment_link,
+                ]);
+
                 return Redirect::away($payment_link);
             } else {
                 $error_message = $result['error_message'] ?? $result['error_code'] ?? 'خطا در اتصال به درگاه پرداخت';

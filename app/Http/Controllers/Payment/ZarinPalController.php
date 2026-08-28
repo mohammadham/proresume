@@ -95,7 +95,7 @@ class ZarinPalController extends Controller
             $result = $response->json();
 
             Log::channel('payment')->info('ZarinPal payment initiation (admin)', [
-                'amount' => $price,
+                'amount' => $amountInRial,
                 'sandbox' => $this->sandbox_mode,
                 'status' => $result['data']['code'] ?? 'unknown',
                 'has_authority' => isset($result['data']['authority']),

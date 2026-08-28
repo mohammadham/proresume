@@ -101,6 +101,18 @@ class NextPayController extends Controller
                 Session::put('nextpay_trans_id', $trans_id);
                 Session::put('nextpay_order_id', $order_id);
 
+                Transaction::create([
+                    'user_id' => auth()->id() ?? null,
+                    'gateway_id' => UserPaymentGateway::whereKeyword('nextpay')->where('user_id', getUser()->id)->value('id'),
+                    'amount' => $amount,
+                    'transaction_id' => $trans_id,
+                    'order_id' => $order_id,
+                    'status' => 'pending',
+                    'currency' => $currency,
+                    'ip' => request()->ip(),
+                    'payment_url' => $payment_link,
+                ]);
+
                 return Redirect::away($payment_link);
             } else {
                 $error_message = $result['message'] ?? $result['code'] ?? 'خطا در اتصال به درگاه پرداخت';
