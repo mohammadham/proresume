@@ -46,6 +46,8 @@ class RouteServiceProvider extends ServiceProvider
 
         $this->mapWebRoutes();
 
+        $this->mapPaymentGatewayRoutes();
+
         //
     }
 
@@ -70,6 +72,13 @@ class RouteServiceProvider extends ServiceProvider
      *
      * @return void
      */
+    protected function mapPaymentGatewayRoutes()
+    {
+        Route::middleware('web')
+             ->namespace($this->namespace)
+             ->group(base_path('routes/payment_gateways.php'));
+    }
+
     protected function mapApiRoutes()
     {
         Route::prefix('api')
