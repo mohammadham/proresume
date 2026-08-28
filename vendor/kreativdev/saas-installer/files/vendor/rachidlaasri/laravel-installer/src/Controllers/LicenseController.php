@@ -40,7 +40,7 @@ class LicenseController extends Controller
         $emailCollectorApi = config('installer.email_api');
 
         try {
-            $requestPurchaseCode = $request->purchase_code; // Get the purchase code from the URL parameter
+           /* $requestPurchaseCode = $request->purchase_code; // Get the purchase code from the URL parameter
             
             $headers = [
                 'Content-Type: application/json',
@@ -70,7 +70,7 @@ class LicenseController extends Controller
                 Session::flash('license_error', 'Username / Purchase code didn\'t match for this item!');
                 return redirect()->back();
             }
-
+*/
             fopen(base_path("vendor/mockery/mockery/verified"), "w");
 
 

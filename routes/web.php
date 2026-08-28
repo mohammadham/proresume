@@ -524,7 +524,6 @@ Route::domain($domain)->group(function () {
         Route::post('/zendit/update', 'User\GatewayController@updateXenditInfo')->name('user.zendit.update');
         Route::post('/yoco/update', 'User\GatewayController@updateYocoInfo')->name('user.yoco.update');
 
-
         // User Offline Gateway Routes
         Route::get('/offline/gateways', 'User\GatewayController@offline')->name('user.gateway.offline');
         Route::post('/offline/gateway/store', 'User\GatewayController@store')->name('user.gateway.offline.store');
@@ -854,7 +853,6 @@ Route::domain($domain)->group(function () {
             Route::post('/xendit', 'Admin\GatewayController@updateXenditInfo')->name('admin.update_xendit_info');
             Route::post('/perfect-money', 'Admin\GatewayController@updatePerfectMoneyInfo')->name('admin.update_perfect_money_info');
 
-
             // Admin Offline Gateway Routes
             Route::get('/offline/gateways', 'Admin\GatewayController@offline')->name('admin.gateway.offline');
             Route::post('/offline/gateway/store', 'Admin\GatewayController@store')->name('admin.gateway.offline.store');
@@ -1006,8 +1004,6 @@ Route::domain($domain)->group(function () {
 
             Route::get('/perfect_money/success', 'Payment\PerfectMoneyController@successPayment')->name('membership.perfect_money.success');
             Route::get('perfect_money/cancel', 'Payment\PerfectMoneyController@cancelPayment')->name('membership.perfect_money.cancel');
-
-
         });
     });
 });
@@ -1118,8 +1114,6 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             ->name('customer.appointment.perfect_money.notify');
         Route::get('/perfect_money/cancel', 'User\Payment\PerfectMoneyController@cancelPayment')
             ->name('customer.appointment.perfect_money.cancel');
-
-
     });
 
     // user redirect to dashboard route
