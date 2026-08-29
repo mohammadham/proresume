@@ -336,6 +336,15 @@ Route::domain($domain)->group(function () {
         Route::post('/update-tawkto', 'User\BasicController@updateTawkto')->name('user.update_tawkto');
         // basic settings plugins route end
 
+        // api integration routes
+        Route::prefix('api-integration')->middleware('auth')->group(function () {
+            Route::get('/', 'User\ApiIntegrationController@index')->name('api.integration');
+            Route::post('/update', 'User\ApiIntegrationController@update')->name('api.integration.update');
+            Route::post('/profile', 'User\ApiIntegrationController@updateProfile')->name('api.integration.profile');
+            Route::post('/regenerate-key', 'User\ApiIntegrationController@regenerateKey')->name('api.integration.regenerate');
+            Route::get('/cities/{provinceId}', 'User\ApiIntegrationController@getCities')->name('api.integration.cities');
+        });
+
         // basic settings seo route
         Route::get('/basic_settings/seo', 'User\BasicController@seo')->name('admin.basic_settings.seo');
         Route::post('/basic_settings/update_seo_informations', 'User\BasicController@updateSEO')->name('admin.basic_settings.update_seo_informations');

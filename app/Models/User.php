@@ -44,7 +44,12 @@ class User extends Authenticatable
         'email_verified',
         'online_status',
         'login_attempts',
-        'login_attempt_time'
+        'login_attempt_time',
+        'service_type',
+        'specialty',
+        'district',
+        'lat',
+        'lng'
     ];
 
     /**
@@ -234,5 +239,10 @@ class User extends Authenticatable
     public function payment_gateways()
     {
         return $this->hasMany(UserPaymentGateway::class);
+    }
+
+    public function apiIntegration()
+    {
+        return $this->hasOne(ApiIntegration::class);
     }
 }

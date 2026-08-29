@@ -101,6 +101,12 @@ return [
             'level'  => 'debug',
             'days'   => 30,
         ],
+        'api' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/api.log'),
+            'level'  => 'debug',
+            'days'   => 30,
+        ],
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
