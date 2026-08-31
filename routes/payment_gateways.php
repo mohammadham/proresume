@@ -12,6 +12,7 @@ Route::namespace('App\Http\Controllers')
         Route::post('/idpay/update', 'User\GatewayController@idpayUpdate')->name('user.idpay.update');
         Route::post('/nextpay/update', 'User\GatewayController@nextpayUpdate')->name('user.nextpay.update');
         Route::post('/payir/update', 'User\GatewayController@payirUpdate')->name('user.payir.update');
+        Route::post('/mellat/update', 'User\GatewayController@mellatUpdate')->name('user.mellat.update');
 
         // Admin gateway update routes (POST from admin panel)
         Route::post('/zarinpal', 'Admin\GatewayController@zarinpalUpdate')->name('admin.zarinpal.update');
@@ -19,6 +20,7 @@ Route::namespace('App\Http\Controllers')
         Route::post('/idpay', 'Admin\GatewayController@idpayUpdate')->name('admin.idpay.update');
         Route::post('/nextpay', 'Admin\GatewayController@nextpayUpdate')->name('admin.nextpay.update');
         Route::post('/payir', 'Admin\GatewayController@payirUpdate')->name('admin.payir.update');
+        Route::post('/mellat', 'Admin\GatewayController@mellatUpdate')->name('admin.mellat.update');
 
         // ZarinPal routes
         Route::match(['get','post'], 'zarinpal/success', 'Payment\ZarinPalController@successPayment')->name('membership.zarinpal.success');
@@ -39,6 +41,10 @@ Route::namespace('App\Http\Controllers')
         // Pay.ir routes (callback is POST per official docs)
         Route::match(['get','post'], 'payir/success', 'Payment\PayIrController@success')->name('membership.payir.success');
         Route::get('payir/cancel', 'Payment\PayIrController@cancel')->name('membership.payir.cancel');
+
+        // Mellat routes
+        Route::match(['get','post'], 'mellat/success', 'Payment\MellatController@successPayment')->name('membership.mellat.success');
+        Route::get('mellat/cancel', 'Payment\MellatController@cancelPayment')->name('membership.mellat.cancel');
 
         // Appointment/Vendor callback routes
         Route::get('/zarinpal/notify', 'User\Payment\ZarinPalController@successPayment')
@@ -65,4 +71,10 @@ Route::namespace('App\Http\Controllers')
             ->name('customer.appointment.payir.notify');
         Route::get('/payir/cancel', 'User\Payment\PayIrController@cancelPayment')
             ->name('customer.appointment.payir.cancel');
+
+        // Mellat callback routes (POST from bank)
+        Route::match(['get','post'], '/mellat/notify', 'User\Payment\MellatController@successPayment')
+            ->name('customer.appointment.mellat.notify');
+        Route::get('/mellat/cancel', 'User\Payment\MellatController@cancelPayment')
+            ->name('customer.appointment.mellat.cancel');
     });

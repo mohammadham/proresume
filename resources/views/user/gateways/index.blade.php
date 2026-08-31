@@ -2050,5 +2050,123 @@
                 </form>
             </div>
         </div>
+
+        <!-- Bank Mellat -->
+        <div class="col-lg-4">
+            <div class="card">
+                <form id="mellatForm" action="{{ route('user.mellat.update') }}" method="post">
+                    @csrf
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="card-title">{{ __('Bank Mellat') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body pt-5 pb-5">
+                        <div class="row">
+                            <div class="col-lg-12">
+                                <div class="form-group">
+                                    <label>{{ __('Bank Mellat Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="1"
+                                                class="selectgroup-input"
+                                                {{ isset($mellat) && $mellat->status == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="status" value="0"
+                                                class="selectgroup-input"
+                                                {{ isset($mellat) && $mellat->status == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('status') }}</p>
+                                    @endif>
+                                </div>
+
+                                @php $mellatInfo = isset($mellat) ? json_decode($mellat->information, true) : null; @endphp
+
+                                <div class="form-group">
+                                    <label>{{ __('Terminal ID') }}</label>
+                                    <input type="text" class="form-control" name="terminal_id"
+                                        value="{{ @$mellatInfo['terminal_id'] }}">
+                                    @if ($errors->has('terminal_id'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('terminal_id') }}</p>
+                                    @endif>
+                                    <p class="text-warning mt-1 mb-0">
+                                        {{ __('You can get your Terminal ID from Bank Mellat dashboard') }}
+                                    </p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Username') }}</label>
+                                    <input type="text" class="form-control" name="username"
+                                        value="{{ @$mellatInfo['username'] }}">
+                                    @if ($errors->has('username'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('username') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Password') }}</label>
+                                    <input type="password" class="form-control" name="password"
+                                        value="{{ @$mellatInfo['password'] }}">
+                                    @if ($errors->has('password'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('password') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Sandbox Status') }}</label>
+                                    <div class="selectgroup w-100">
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="1"
+                                                class="selectgroup-input"
+                                                {{ @$mellatInfo['sandbox_status'] == 1 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Active') }}</span>
+                                        </label>
+                                        <label class="selectgroup-item">
+                                            <input type="radio" name="sandbox_status" value="0"
+                                                class="selectgroup-input"
+                                                {{ @$mellatInfo['sandbox_status'] == 0 ? 'checked' : '' }}>
+                                            <span class="selectgroup-button">{{ __('Deactive') }}</span>
+                                        </label>
+                                    </div>
+                                    @if ($errors->has('sandbox_status'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('sandbox_status') }}</p>
+                                    @endif>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ __('Callback URL') }}</label>
+                                    <input type="text" class="form-control" name="callback_url"
+                                        value="{{ @$mellatInfo['callback_url'] ?? url('mellat/success') }}">
+                                    <small class="form-text text-muted">{{ __('Leave empty to use default') }}</small>
+                                    @if ($errors->has('callback_url'))
+                                        <p class="mt-1 mb-0 text-danger">{{ $errors->first('callback_url') }}</p>
+                                    @endif>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="form">
+                            <div class="form-group from-show-notify row">
+                                <div class="col-12 text-center">
+                                    <button type="submit" form="mellatForm" class="btn btn-success">
+                                        {{ __('Update') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 @endsection

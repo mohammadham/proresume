@@ -822,6 +822,47 @@ class GatewayController extends Controller
         return back();
     }
 
+    public function mellatUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'terminal_id' => 'required',
+            'username' => 'required',
+            'password' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'mellat'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'mellat',
+                'name' => 'Bank Mellat',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'terminal_id' => $request->terminal_id,
+                    'username' => $request->username,
+                    'password' => $request->password,
+                    'sandbox_status' => $request->sandbox_status,
+                    'callback_url' => $request->callback_url ?? url('mellat/success'),
+                    'text' => $request->text ?? 'پرداخت امن با بانک ملت',
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
     public function mercadopagoUpdate(Request $request)
     {
         $user = Auth::guard('web')->user();

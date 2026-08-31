@@ -41,11 +41,13 @@ use App\Http\Controllers\Payment\FlutterWaveController;
 use App\Http\Controllers\Payment\MercadopagoController;
 use App\Http\Controllers\Payment\AuthorizenetController;
 use App\Http\Controllers\Payment\PerfectMoneyController;
+use App\Http\Controllers\Payment\MellatController;
 use App\Http\Controllers\User\Payment\IdPayController;
 use App\Http\Controllers\User\Payment\NextPayController;
 use App\Http\Controllers\User\Payment\PayIrController;
 use App\Http\Controllers\User\Payment\ZarinPalController;
 use App\Http\Controllers\User\Payment\ZibalController;
+use App\Http\Controllers\User\Payment\MellatController as UserMellatController;
 
 class CheckoutController extends Controller
 {
@@ -356,6 +358,12 @@ class CheckoutController extends Controller
             $success_url = route('membership.zibal.success');
             $cancel_url = route('membership.zibal.cancel');
             $payment = new ZibalController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Mellat') {
+            $amount = $request->price;
+            $success_url = route('membership.mellat.success');
+            $cancel_url = route('membership.mellat.cancel');
+            $payment = new MellatController();
             return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
         } elseif ($request->payment_method == 'Pay.ir') {
             $amount = $request->price;

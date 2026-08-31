@@ -36,7 +36,7 @@ class GatewayController extends Controller
         $data['xendit'] = PaymentGateway::where('keyword', 'xendit')->first();
         $data['yoco'] = PaymentGateway::where('keyword', 'yoco')->first();
         $data['perfect_money'] = PaymentGateway::where('keyword', 'perfect_money')->first();
-        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir'] as $kw) {
+        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir', 'mellat'] as $kw) {
             $data[$kw] = PaymentGateway::where('keyword', $kw)->first();
         }
         
@@ -458,6 +458,31 @@ class GatewayController extends Controller
         ]);
         $payir->save();
         return back()->with('success', 'Pay.ir Information Updated Successfully');
+    }
+
+    public function mellatUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'terminal_id' => 'required|string',
+            'username' => 'required|string',
+            'password' => 'required|string',
+            'sandbox_status' => 'required|integer',
+            'callback_url' => 'nullable|url',
+        ]);
+        $mellat = PaymentGateway::where('keyword', 'mellat')->firstOrFail();
+        $mellat->status = $request->status;
+        $mellat->information = json_encode([
+            'terminal_id' => $request->terminal_id,
+            'username' => $request->username,
+            'password' => $request->password,
+            'sandbox_status' => $request->sandbox_status,
+            'callback_url' => $request->callback_url,
+            'description' => $request->description ?? 'پرداخت اشتراک با بانک ملت',
+            'text' => $request->text ?? 'پرداخت امن با بانک ملت',
+        ]);
+        $mellat->save();
+        return back()->with('success', 'Bank Mellat Information Updated Successfully');
     }
 
     public function offline(Request $request)

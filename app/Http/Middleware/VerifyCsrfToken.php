@@ -29,5 +29,8 @@ class VerifyCsrfToken extends Middleware
         '*/paytabs/notify',
         '*/iyzico/notify',
         '*paytabs/success',
+
+        '*/mellat/notify',
+        '*/mellat/success',
     ];
 }

@@ -40,6 +40,7 @@ use App\Http\Controllers\Payment\ZibalController;
 use App\Http\Controllers\Payment\IdPayController;
 use App\Http\Controllers\Payment\NextPayController;
 use App\Http\Controllers\Payment\PayIrController;
+use App\Http\Controllers\Payment\MellatController;
 
 class UserCheckoutController extends Controller
 {
@@ -310,6 +311,12 @@ class UserCheckoutController extends Controller
             $success_url = route('membership.payir.success');
             $cancel_url = route('membership.payir.cancel');
             $payment = new PayIrController();
+            return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
+        } elseif ($request->payment_method == 'Mellat') {
+            $amount = $request->price;
+            $success_url = route('membership.mellat.success');
+            $cancel_url = route('membership.mellat.cancel');
+            $payment = new MellatController();
             return $payment->paymentProcess($request, $amount, $title, $success_url, $cancel_url);
         } elseif (in_array($request->payment_method, $offline_payment_gateways)) {
             $request['status'] = '0';

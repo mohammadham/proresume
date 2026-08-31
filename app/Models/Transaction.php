@@ -13,6 +13,8 @@ class Transaction extends Model
         'currency',
         'transaction_id',
         'order_id',
+        'sale_order_id',
+        'sale_reference_id',
         'tracking_code',
         'status',
         'ip',
