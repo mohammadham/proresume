@@ -17,7 +17,11 @@ class BasicSetting extends Model
         'theme',
         'website_title',
         'email',
-        'from_name'
+        'from_name',
+        'watermark_status',
+        'watermark_text',
+        'watermark_url',
+        'watermark_image'
     ];
 
     public function language()

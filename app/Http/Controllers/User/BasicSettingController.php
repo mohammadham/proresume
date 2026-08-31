@@ -99,4 +99,48 @@ class BasicSettingController extends Controller
         Session::flash('success', __('Updated successfully') . '!');
         return back();
     }
+
+    public function watermark()
+    {
+        $data['data'] = BasicSetting::where('user_id', Auth::guard('web')->user()->id)->first();
+        return view('user.settings.watermark', $data);
+    }
+
+    public function updateWatermark(Request $request)
+    {
+        $request->validate([
+            'watermark_status' => 'required|integer',
+            'watermark_text' => 'nullable|string|max:100',
+            'watermark_url' => 'nullable|url|max:255',
+            'watermark_image' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+        ]);
+
+        $bs = BasicSetting::where('user_id', Auth::id())->first();
+
+        if (!$bs) {
+            $bs = new BasicSetting();
+            $bs->user_id = Auth::id();
+        }
+
+        // Handle image upload
+        if ($request->hasFile('watermark_image')) {
+            $img = $request->file('watermark_image');
+            $filename = uniqid() . '.' . $img->getClientOriginalExtension();
+            $img->move(public_path('assets/front/img/user/watermark/'), $filename);
+
+            // Remove old image
+            if ($bs->watermark_image) {
+                @unlink(public_path('assets/front/img/user/watermark/' . $bs->watermark_image));
+            }
+            $bs->watermark_image = $filename;
+        }
+
+        $bs->watermark_status = $request->watermark_status;
+        $bs->watermark_text = $request->watermark_text;
+        $bs->watermark_url = $request->watermark_url;
+        $bs->save();
+
+        Session::flash('success', __('Updated successfully!'));
+        return back();
+    }
 }

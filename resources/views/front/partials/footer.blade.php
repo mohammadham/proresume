@@ -48,7 +48,7 @@
     </div>
     @endif
 
-    @if ($bs->copyright_section == 1)   
+    @if ($bs->copyright_section == 1)
     <div class="copyright-area">
         <div class="container">
             <div class="col-lg-12">
@@ -61,4 +61,11 @@
         </div>
     </div>
     @endif
+
+    @include('partials.watermark', [
+        'watermark_status' => $bs->watermark_status ?? 0,
+        'watermark_text' => $bs->watermark_text ?? '',
+        'watermark_url' => $bs->watermark_url ?? '',
+        'watermark_image' => $bs->watermark_image ?? '',
+    ])
 </footer><!--====== End Footer ======-->

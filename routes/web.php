@@ -302,6 +302,10 @@ Route::domain($domain)->group(function () {
         Route::get('footer-section', 'User\BasicSettingController@footerSection')->name('user.footer_section.index');
         Route::post('footer-section/update', 'User\BasicSettingController@updateFooterSection')->name('user.footer_section.update');
 
+        // user watermark routes
+        Route::get('/watermark', 'User\BasicSettingController@watermark')->name('user.watermark');
+        Route::post('/watermark/update', 'User\BasicSettingController@updateWatermark')->name('user.watermark.update');
+
         //user preference
         Route::get('preference', 'User\PreferenceController@index')->name('user.preference.index');
         Route::post('preference/update', 'User\PreferenceController@update')->name('user.preference.update');
@@ -594,6 +598,10 @@ Route::domain($domain)->group(function () {
             // Admin Basic Information Routes
             Route::get('/basicinfo', 'Admin\BasicController@basicinfo')->name('admin.basicinfo');
             Route::post('/basicinfo/post', 'Admin\BasicController@updatebasicinfo')->name('admin.basicinfo.update');
+
+            // Admin Watermark Routes
+            Route::get('/watermark', 'Admin\BasicController@watermark')->name('admin.watermark');
+            Route::post('/watermark/update', 'Admin\BasicController@updateWatermark')->name('admin.watermark.update');
 
             // Admin Email Settings Routes
             Route::get('/mail-from-admin', 'Admin\EmailController@mailFromAdmin')->name('admin.mailFromAdmin');
