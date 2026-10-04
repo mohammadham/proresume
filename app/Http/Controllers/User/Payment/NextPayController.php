@@ -176,7 +176,9 @@ class NextPayController extends Controller
             return redirect($cancel_url)->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
-        if ($status == '0') {
+        // Same fix as the membership controller: NextPay sends status=OK on the
+        // callback, so `== '0'` skipped verification for every paid order.
+        if ($trans_id && strcasecmp((string) $status, 'OK') === 0) {
             try {
                 $api_url = 'https://nextpay.org/nx/gateway/verify';
 

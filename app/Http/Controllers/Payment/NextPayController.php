@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 use App\Models\Language;
 use App\Http\Controllers\Payment\Concerns\GrantsPurchase;
@@ -57,6 +58,15 @@ class NextPayController extends Controller
         if ($amount < $minAmount) {
             return back()->with('error', 'مبلغ کمتر از حداقل مجاز درگاه است.');
         }
+
+        // grantPurchase() reads the checkout payload from the session after the
+        // bank calls back. Every other Iranian gateway (ZarinPal, Zibal, Mellat,
+        // IDPay, Pay.ir) stashes it here; this controller never did, so a fully
+        // verified NextPay payment still ended with "checkout payload missing"
+        // and no membership.
+        Session::put('request', $request->all());
+        Session::put('amount', $amount);
+        Session::put('paymentFor', Session::get('paymentFor'));
 
         $orderId = 'NEXTPAY_' . Str::uuid()->toString();
         $gatewayInfo = json_decode($this->gateway->information, true);
@@ -158,7 +168,13 @@ class NextPayController extends Controller
             return redirect()->route('front.pricing')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
-        if ($status == '0') {
+        // NextPay returns the buyer to the callback with status=OK (NOK when
+        // cancelled). "0" is a verify-API response code, never a callback value,
+        // so the old `== '0'` check made every successful callback skip
+        // verification entirely: the order was marked failed, the customer got
+        // no membership, and the money had already been taken. The official
+        // NextPay plugin likewise keys off trans_id + verify code, not status.
+        if ($paymentId && strcasecmp((string) $status, 'OK') === 0) {
             // Payment successful, verify
             $gatewayInfo = json_decode($this->gateway->information, true);
             $apiKey = $gatewayInfo['api_key'] ?? '';

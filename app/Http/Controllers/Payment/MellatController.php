@@ -252,12 +252,14 @@ class MellatController extends Controller
                 ]);
 
                 // bpVerifyRequest - requires terminalId, orderId, saleOrderId, saleReferenceId per WSDL
-                // Get saleOrderId and saleReferenceId from session (set during callback if available)
-                $saleOrderId = Session::get('mellat_saleOrderId');
-                $saleReferenceId = Session::get('mellat_saleReferenceId');
+                // The callback already persisted these on the transaction row, so read them
+                // from there. The session dies between "bank -> buyer's browser -> site"
+                // (expired session, second device, cleared cookies), and sending
+                // saleOrderId=0 to Shaparak fails a verification for money the bank
+                // already took.
+                $saleOrderId = $transaction->sale_order_id;
+                $saleReferenceId = $transaction->sale_reference_id;
 
-                // If not in session, we need to use bpInquiryRequest to get them
-                // For now, we'll attempt with what we have
                 $result = $client->bpVerifyRequest([
                     'terminalId' => $this->terminal_id,
                     'userName' => $this->username,
@@ -498,10 +500,10 @@ class MellatController extends Controller
             $refundAmount = $amount ?? $transaction->amount;
 
             // bpSettleRequest for refund - requires terminalId, orderId, saleOrderId, saleReferenceId per WSDL
-            // We need to get saleOrderId and saleReferenceId - they should be stored in transaction details or session
-            // For now, we'll attempt with the stored values
-            $saleOrderId = Session::get('mellat_saleOrderId');
-            $saleReferenceId = Session::get('mellat_saleReferenceId');
+            // Read what the payment callback persisted on the transaction row - a refund
+            // can legitimately run years later, long after any session has died.
+            $saleOrderId = $transaction->sale_order_id;
+            $saleReferenceId = $transaction->sale_reference_id;
 
             $result = $client->bpSettleRequest([
                 'terminalId' => $this->terminal_id,
