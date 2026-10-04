@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\Package;
+use App\Models\Language;
+use App\Http\Controllers\Payment\Concerns\GrantsPurchase;
 
 class IdPayController extends Controller
 {
+    use GrantsPurchase;
     protected $gateway;
     protected $apiUrl = 'https://api.idpay.ir/v1.1/payment';
     protected $verifyUrl = 'https://api.idpay.ir/v1.1/payment/verify';
@@ -190,8 +193,22 @@ class IdPayController extends Controller
                         'tracking_code' => $result['track_id'] ?? null,
                     ]);
 
-                    return redirect()->route('front.pricing')
-                        ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . ($result['track_id'] ?? ''));
+                    // Verified - now actually deliver what was paid for. This
+                    // used to stop at "transaction is successful" and drop the
+                    // customer on the pricing page, so a paid IDPay order never
+                    // produced a membership.
+                    $currentLang = session()->has('lang')
+                        ? Language::where('code', session()->get('lang'))->first()
+                        : Language::where('is_default', 1)->first();
+                    $requestData = session()->get('request');
+
+                    return $this->grantPurchase(
+                        is_array($requestData) ? $requestData : [],
+                        $transaction,
+                        'IDPay',
+                        $currentLang->basic_extended,
+                        $currentLang->basic_setting
+                    );
                 } else {
                     $transaction->update(['status' => 'failed']);
                     $mismatch = isset($result['amount']) && (int) $result['amount'] !== (int) $transaction->amount;

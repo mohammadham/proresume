@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Package;
 use Illuminate\Support\Str;
+use App\Models\Language;
+use App\Http\Controllers\Payment\Concerns\GrantsPurchase;
 
 /**
  * Pay.ir Payment Gateway (API v2 — token based).
@@ -22,6 +24,7 @@ use Illuminate\Support\Str;
  */
 class PayIrController extends Controller
 {
+    use GrantsPurchase;
     protected $gateway;
     protected $apiUrl        = 'https://pay.ir/pg/send';
     protected $verifyUrl     = 'https://pay.ir/pg/verify';
@@ -219,8 +222,22 @@ class PayIrController extends Controller
                         'tracking_code' => $result['transId'] ?? $token,
                     ]);
 
-                    return redirect()->route('front.pricing')
-                        ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . ($result['transId'] ?? $token));
+                    // Verified - now actually deliver what was paid for. This
+                    // used to stop at "transaction is successful" and drop the
+                    // customer on the pricing page, so a paid Pay.ir order never
+                    // produced a membership.
+                    $currentLang = session()->has('lang')
+                        ? Language::where('code', session()->get('lang'))->first()
+                        : Language::where('is_default', 1)->first();
+                    $requestData = session()->get('request');
+
+                    return $this->grantPurchase(
+                        is_array($requestData) ? $requestData : [],
+                        $transaction,
+                        'Pay.ir',
+                        $currentLang->basic_extended,
+                        $currentLang->basic_setting
+                    );
                 }
 
                 $transaction->update(['status' => 'failed']);

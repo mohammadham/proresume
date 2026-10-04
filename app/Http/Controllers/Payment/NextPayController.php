@@ -11,9 +11,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Models\Language;
+use App\Http\Controllers\Payment\Concerns\GrantsPurchase;
 
 class NextPayController extends Controller
 {
+    use GrantsPurchase;
     protected $gateway;
     protected string $apiUrl = 'https://nextpay.org/nx/gateway/token';
     protected string $verifyUrl = 'https://nextpay.org/nx/gateway/verify';
@@ -186,8 +189,22 @@ class NextPayController extends Controller
                         'tracking_code' => $paymentId,
                     ]);
 
-                    return redirect()->route('front.pricing')
-                        ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . $paymentId);
+                    // Verified - now actually deliver what was paid for. This
+                    // used to stop at "transaction is successful" and drop the
+                    // customer on the pricing page, so a paid NextPay order never
+                    // produced a membership.
+                    $currentLang = session()->has('lang')
+                        ? Language::where('code', session()->get('lang'))->first()
+                        : Language::where('is_default', 1)->first();
+                    $requestData = session()->get('request');
+
+                    return $this->grantPurchase(
+                        is_array($requestData) ? $requestData : [],
+                        $transaction,
+                        'NextPay',
+                        $currentLang->basic_extended,
+                        $currentLang->basic_setting
+                    );
                 } else {
                     $transaction->update(['status' => 'failed']);
                     $error_message = !$amountOk
