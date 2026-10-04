@@ -55,7 +55,10 @@
 
                     <div class="form-group mt-3">
                         <label>{{ __('Enamad Secret Key') }}</label>
-                        <input type="password" class="form-control" name="enamad_secret_key" value="{{ old('enamad_secret_key', $data->enamad_secret_key ?? '') }}" placeholder="{{ __('Secret Key from Enamad') }}">
+                        {{-- Masked on purpose: never echo the stored secret into HTML.
+                            old() only repopulates a value the user just typed on a
+                            validation failure; a blank submit keeps the stored key. --}}
+                        <input type="password" class="form-control" name="enamad_secret_key" value="{{ old('enamad_secret_key') }}" placeholder="{{ __('Secret Key from Enamad') }}">
                     </div>
 
                     <div class="form-group mt-3">

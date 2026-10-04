@@ -72,7 +72,9 @@
 
                             <div class="form-group">
                                 <label>{{ __('Enamad Secret Key') }}</label>
-                                <input type="password" class="form-control" name="enamad_secret_key" value="{{ $abs->enamad_secret_key }}" placeholder="{{ __('Secret Key from Enamad') }}">
+                                {{-- Masked on purpose: never echo the stored secret into HTML.
+                                    A blank submit keeps the stored key (handled in the controller). --}}
+                                <input type="password" class="form-control" name="enamad_secret_key" value="" placeholder="{{ __('Secret Key from Enamad') }}">
                                 @if ($errors->has('enamad_secret_key'))
                                     <p class="mb-0 text-danger">{{$errors->first('enamad_secret_key')}}</p>
                                 @endif
