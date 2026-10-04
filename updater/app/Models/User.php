@@ -13,12 +13,13 @@ use App\Models\User\UserOfflinePaymentGateway;
 use App\Models\User\UserPaymentGateway;
 use App\Notifications\UserResetPassword;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class User extends Authenticatable
 {
-    use Notifiable;
+    use Notifiable, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -44,7 +45,12 @@ class User extends Authenticatable
         'email_verified',
         'online_status',
         'login_attempts',
-        'login_attempt_time'
+        'login_attempt_time',
+        'service_type',
+        'specialty',
+        'district',
+        'lat',
+        'lng'
     ];
 
     /**
@@ -234,5 +240,10 @@ class User extends Authenticatable
     public function payment_gateways()
     {
         return $this->hasMany(UserPaymentGateway::class);
+    }
+
+    public function apiIntegration()
+    {
+        return $this->hasOne(ApiIntegration::class);
     }
 }

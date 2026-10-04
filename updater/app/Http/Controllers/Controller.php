@@ -73,13 +73,19 @@ class Controller extends BaseController
         $currentLangCode = app()->getLocale();
         $currentLang = Language::where('code', $currentLangCode)->first();
         $isRtl = $currentLang->rtl == 1 ? 'rtl' : 'ltr';
+        // pdf.membership reads $bs (logo, contact details). It used to arrive
+        // only via the AppServiceProvider view composer, which is skipped on the
+        // CLI - so generating an invoice outside an HTTP request died with
+        // "Undefined variable $bs". Pass it explicitly instead of relying on a
+        // global composer that is not always registered.
+        $bs = $currentLang->basic_setting;
 
         $file_name = uniqid($key) . ".pdf";
         $pdf = PDF::setOptions([
             'isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true,
             'logOutputFile' => storage_path('logs/log.htm'),
             'tempDir' => storage_path('logs/')
-        ])->loadView('pdf.membership', compact('request', 'member', 'password', 'amount', 'payment_method', 'phone', 'base_currency_symbol_position', 'base_currency_symbol', 'base_currency_text', 'order_id', 'package_title', 'isRtl'));
+        ])->loadView('pdf.membership', compact('request', 'member', 'password', 'amount', 'payment_method', 'phone', 'base_currency_symbol_position', 'base_currency_symbol', 'base_currency_text', 'order_id', 'package_title', 'isRtl', 'bs'));
         $output = $pdf->output();
         @mkdir(public_path('assets/front/invoices/'), 0775, true);
         file_put_contents(public_path('assets/front/invoices/' . $file_name), $output);

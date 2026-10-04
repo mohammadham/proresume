@@ -24,6 +24,39 @@ class RouteServiceProvider extends ServiceProvider
     public const HOME = '/home';
 
     /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    public function register()
+    {
+        parent::register();
+
+        // Routes declared inside a `Route::domain(...)` group build their absolute
+        // URL from the route domain, so on a sub-directory install
+        // (http://localhost/proresume/) `URL::forceRootUrl()` never applies to
+        // them and every generated link silently drops the prefix. `format()`
+        // funnels every URL root through UrlGenerator::formatHostUsing, so hook
+        // that to re-attach the APP_URL path. With no path in APP_URL - a normal
+        // root install - this is a no-op.
+        $this->app->extend('url', function ($url, $app) {
+            $basePath = rtrim((string) parse_url((string) $app['config']['app.url'], PHP_URL_PATH), '/');
+
+            if ($basePath !== '') {
+                $url->formatHostUsing(function ($root) use ($basePath) {
+                    if ($root === '' || str_ends_with($root, $basePath)) {
+                        return $root;
+                    }
+
+                    return $root . $basePath;
+                });
+            }
+
+            return $url;
+        });
+    }
+
+    /**
      * Define your route model bindings, pattern filters, etc.
      *
      * @return void

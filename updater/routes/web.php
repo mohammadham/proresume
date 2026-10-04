@@ -71,9 +71,7 @@ Route::domain($domain)->group(function () {
         Route::post('/register/submit', 'User\Auth\RegisterController@register')->name('user-register-submit');
         Route::get('/register/mode/{mode}/verify/{token}', 'User\Auth\RegisterController@token')->name('user-register-token');
 
-        Route::post('/password/email', 'User\Auth\ForgotPasswordController@sendResetLinkEmail')
-            ->name('user.forgot.password.submit')
-            ->middleware('Demo');
+        Route::post('/password/email', 'User\Auth\ForgotPasswordController@sendResetLinkEmail')->name('user.forgot.password.submit');
         Route::get('/password/reset', 'User\Auth\ForgotPasswordController@showLinkRequestForm')->name('user.forgot.password.form');
         Route::post('/password/reset', 'User\Auth\ResetPasswordController@reset')->name('user.reset.password.submit');
         Route::get('/password/reset/{token}/email/{email}', 'User\Auth\ResetPasswordController@showResetForm')->name('user.reset.password.form');
@@ -86,7 +84,7 @@ Route::domain($domain)->group(function () {
      ******************** User Dashboard Routes **********************
      =======================================================*/
 
-    Route::group(['prefix' => 'user', 'middleware' => ['auth', 'userstatus', 'userLang', 'Demo']], function () {
+    Route::group(['prefix' => 'user', 'middleware' => ['auth', 'userstatus', 'userLang']], function () {
         // user theme change
         Route::get('/change-theme', 'User\UserController@changeTheme')->name('user.theme.change');
         Route::get('/change-language', 'User\UserController@changeLanguage')->name('user.change.language');
@@ -263,7 +261,6 @@ Route::domain($domain)->group(function () {
         Route::post('user/customer/ban', 'User\UserController@userban')->name('user.customer.ban');
         Route::get('register/customer/details/{customer}', 'User\UserController@view')->name('register.customer.view');
         Route::post('register/customer/email', 'User\UserController@emailStatus')->name('register.customer.email');
-        Route::get('/ads-reports', 'User\PostController@viewReports')->name('user.ads-report');
         Route::get('/register-user', 'User\UserController@registerUsers')->name('user.register-user');
         Route::get('register/customer/{customer}/changePassword', 'User\UserController@changePassCstmr')->name('register.customer.changePass');
         Route::post('register/customer/updatePassword', 'User\UserController@updatePasswordCstmr')->name('register.customer.updatePassword');
@@ -337,6 +334,15 @@ Route::domain($domain)->group(function () {
         Route::post('/update-pixel', 'User\BasicController@updatePixel')->name('user.update_pixel');
         Route::post('/update-tawkto', 'User\BasicController@updateTawkto')->name('user.update_tawkto');
         // basic settings plugins route end
+
+        // api integration routes
+        Route::prefix('api-integration')->middleware('auth')->group(function () {
+            Route::get('/', 'User\ApiIntegrationController@index')->name('api.integration');
+            Route::post('/update', 'User\ApiIntegrationController@update')->name('api.integration.update');
+            Route::post('/profile', 'User\ApiIntegrationController@updateProfile')->name('api.integration.profile');
+            Route::post('/regenerate-key', 'User\ApiIntegrationController@regenerateKey')->name('api.integration.regenerate');
+            Route::get('/cities/{provinceId}', 'User\ApiIntegrationController@getCities')->name('api.integration.cities');
+        });
 
         // basic settings seo route
         Route::get('/basic_settings/seo', 'User\BasicController@seo')->name('admin.basic_settings.seo');
@@ -542,12 +548,12 @@ Route::domain($domain)->group(function () {
         Route::get('/', 'Admin\LoginController@login')->name('admin.login');
         Route::post('/login', 'Admin\LoginController@authenticate')->name('admin.auth');
         Route::get('/mail-form', 'Admin\ForgetController@mailForm')->name('admin.forget.form');
-        Route::post('/sendmail', 'Admin\ForgetController@sendmail')->name('admin.forget.mail')->middleware('Demo');
+        Route::post('/sendmail', 'Admin\ForgetController@sendmail')->name('admin.forget.mail');
     });
 
     Route::get('/set-locale-admin', 'Admin\BasicController@setLocaleAdmin')->name('set-Locale-admin');
 
-    Route::group(['prefix' => 'admin', 'middleware' => ['auth:admin', 'checkstatus', 'adminLang', 'Demo']], function () {
+    Route::group(['prefix' => 'admin', 'middleware' => ['auth:admin', 'checkstatus', 'adminLang']], function () {
         // RTL check
         Route::get('/rtlcheck/{langid}', 'Admin\LanguageController@rtlcheck')->name('admin.rtlcheck');
 
@@ -757,9 +763,7 @@ Route::domain($domain)->group(function () {
             Route::post('/user/next-package/change', 'Admin\RegisterUserController@changeNextPackage')->name('user.nextPackage.change');
             Route::post('/user/next-package/add', 'Admin\RegisterUserController@addNextPackage')->name('user.nextPackage.add');
             Route::post('register/user/delete', 'Admin\RegisterUserController@delete')->name('register.user.delete');
-            Route::post('register/user/secret-login', 'Admin\RegisterUserController@secretLogin')
-                ->name('register.user.secretLogin')
-                ->withoutMiddleware('Demo');
+            Route::post('register/user/secret-login', 'Admin\RegisterUserController@secretLogin')->name('register.user.secretLogin');
             Route::post('register/user/bulk-delete', 'Admin\RegisterUserController@bulkDelete')->name('register.user.bulk.delete');
             Route::get('register/user/{id}/changePassword', 'Admin\RegisterUserController@changePass')->name('register.user.changePass');
             Route::post('register/user/updatePassword', 'Admin\RegisterUserController@updatePassword')->name('register.user.updatePassword');
@@ -896,13 +900,7 @@ Route::domain($domain)->group(function () {
             Route::post('/language/store', 'Admin\LanguageController@store')->name('admin.language.store');
             Route::post('/language/upload', 'Admin\LanguageController@upload')->name('admin.language.upload');
             Route::post('/language/{id}/uploadUpdate', 'Admin\LanguageController@uploadUpdate')->name('admin.language.uploadUpdate');
-            Route::post(
-                '/language/{id}/default',
-                'Admin\LanguageController
-
-    @default
-        ',
-            )->name('admin.language.default');
+            Route::post('/language/{id}/default', 'Admin\LanguageController@default')->name('admin.language.default');
             Route::post('/language/{id}/delete', 'Admin\LanguageController@delete')->name('admin.language.delete');
             Route::post('/language/update', 'Admin\LanguageController@update')->name('admin.language.update');
             Route::post('/language/{id}/update/keyword', 'Admin\LanguageController@updateKeyword')->name('admin.language.updateKeyword');
@@ -969,10 +967,7 @@ Route::domain($domain)->group(function () {
         Route::post('/membership/checkout', 'Front\CheckoutController@checkout')
             ->name('front.membership.checkout')
             ->middleware('Demo');
-        Route::post('/payment/instructions', 'Front\FrontendController@paymentInstruction')->name('front.payment.instructions');
-        Route::post('/admin/contact-msg', 'Front\FrontendController@adminContactMessage')
-            ->name('front.admin.contact.message')
-            ->middleware('Demo');
+        Route::post('/payment/instructions', 'Front\FrontendController@paymentInstruction')->name('front.payment.instructions');            Route::post('/admin/contact-msg', 'Front\FrontendController@adminContactMessage')->name('front.admin.contact.message');
         //checkout payment gateway routes
         Route::prefix('membership')->group(function () {
             Route::get('paypal/success', 'Payment\PaypalController@successPayment')->name('membership.paypal.success');
@@ -1133,8 +1128,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             Route::get('/dashboard', 'Front\CustomerController@redirectToDashboard')->name('customer.dashboard');
             Route::get('/change-password', 'Front\CustomerController@changePassword')->name('customer.change_password');
             // update password route
-            Route::post('/update-password', 'Front\CustomerController@updatePassword')->name('customer.update_password')
-                ->middleware('Demo');
+            Route::post('/update-password', 'Front\CustomerController@updatePassword')->name('customer.update_password');
             // user logout attempt route
             // edit profile route
             Route::get('/edit-profile', 'Front\CustomerController@editProfile')->name('customer.edit_profile');
@@ -1142,8 +1136,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             Route::get('/my-appointments', 'Front\CustomerController@appointments')->name('customer.appointments');
             Route::get('/appointment-details/{appointment}', 'Front\CustomerController@appointmentDetails')->name('customer.appointments.details');
             // update profile route
-            Route::post('/update-profile', 'Front\CustomerController@updateProfile')->name('customer.update_profile')
-                ->middleware('Demo');
+            Route::post('/update-profile', 'Front\CustomerController@updateProfile')->name('customer.update_profile');
             Route::get('/logout', 'Front\CustomerController@logoutSubmit')->name('customer.logout');
         });
     Route::prefix('/user')
@@ -1156,9 +1149,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             // user forget password route
             Route::get('/forget-password', 'Front\CustomerController@forgetPassword')->name('customer.forget_password');
             // send mail to user for forget password route
-            Route::post('/send-forget-password-mail', 'Front\CustomerController@sendMail')
-                ->name('customer.send_forget_password_mail')
-                ->middleware('Demo');
+            Route::post('/send-forget-password-mail', 'Front\CustomerController@sendMail')->name('customer.send_forget_password_mail');
             // reset password route
             Route::get('/reset-password', 'Front\CustomerController@resetPassword')->name('customer.reset_password');
             // user reset password submit route
@@ -1186,8 +1177,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
 
     Route::group(['middleware' => ['routeAccess:Contact', 'userWebsiteLang']], function () {
         Route::get('/contact', 'Front\FrontendController@userContact')->name('front.user.contact');
-        Route::post('/contact/message', 'Front\FrontendController@contactMessage')->name('front.contact.message')
-            ->middleware('Demo');
+        Route::post('/contact/message', 'Front\FrontendController@contactMessage')->name('front.contact.message');
     });
     Route::group(['middleware' => ['routeAccess:Service']], function () {
         Route::get('/services', 'Front\FrontendController@userServices')->name('front.user.services');

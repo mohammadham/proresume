@@ -26,6 +26,7 @@
         "kreativdev/saas-installer": "^1.0",
         "laravel-notification-channels/webpush": "^7.0.0",
         "laravel/framework": "^9.0",
+        "laravel/sanctum": "*",
         "laravel/socialite": "^5.2",
         "laravel/tinker": "^2.5",
         "laravel/ui": "^3.3",

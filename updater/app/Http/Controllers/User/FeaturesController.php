@@ -13,7 +13,14 @@ class FeaturesController extends Controller
 {
     public function index(Request $request)
     {
-        $language = Language::where('code', $request->language)->where('user_id', Auth::guard('web')->user()->id)->first();
+        // The sidebar always passes ?language=<code>; fall back to the owner's
+        // default language instead of fataling on a missing/unknown param.
+        $language = Language::where('code', $request->language)->where('user_id', Auth::guard('web')->user()->id)->first()
+            ?: Language::where('is_default', 1)->where('user_id', Auth::guard('web')->user()->id)->first();
+
+        if (empty($language)) {
+            return redirect()->route('user.dashboard')->with('warning', __('No language is configured yet.'));
+        }
 
         $data['features'] = Feature::where([['language_id', $language->id], ['user_id', Auth::guard('web')->user()->id]])
             ->latest()
