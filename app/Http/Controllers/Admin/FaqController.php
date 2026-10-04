@@ -13,7 +13,13 @@ class FaqController extends Controller
 {
     public function index(Request $request)
     {
-        $lang = Language::where('code', $request->language)->first();
+        // The sidebar always passes ?language=<code>; fall back to the default
+        // language instead of fataling when the param is missing or unknown.
+        $lang = Language::where('code', $request->language)->first() ?: Language::where('is_default', 1)->first();
+
+        if (empty($lang)) {
+            return redirect()->route('admin.dashboard')->with('warning', __('No language is configured yet.'));
+        }
 
         $lang_id = $lang->id;
         $data['faqs'] = Faq::where('language_id', $lang_id)->orderBy('id', 'DESC')->get();

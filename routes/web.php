@@ -61,11 +61,18 @@ Route::domain($domain)->group(function () {
         Route::view('/success', 'front.success')->name('success.page');
     });
 
-    // Enamad Routes (Public API)
-    Route::post('/enamad/verify', 'EnamadController@verify')->name('enamad.verify');
+    // Enamad Routes (Public API).
+    // These are called server-to-server by Enamad itself (and by the badge
+    // widget), so they cannot present a CSRF token - leaving VerifyCsrfToken on
+    // them made every POST return 419 and the verification could never run.
+    Route::post('/enamad/verify', 'EnamadController@verify')
+        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+        ->name('enamad.verify');
     Route::get('/enamad/status', 'EnamadController@status')->name('enamad.status');
     Route::get('/enamad/logo', 'EnamadController@logo')->name('enamad.logo');
-    Route::post('/enamad/verify/manual', 'EnamadController@manualVerify')->name('enamad.verify.manual');
+    Route::post('/enamad/verify/manual', 'EnamadController@manualVerify')
+        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+        ->name('enamad.verify.manual');
 
     Route::group(['middleware' => ['web', 'guest', 'setlang']], function () {
         Route::get('/registration/final-step', 'Front\FrontendController@step2')->name('front.registration.step2');
@@ -267,7 +274,7 @@ Route::domain($domain)->group(function () {
         Route::post('user/customer/ban', 'User\UserController@userban')->name('user.customer.ban');
         Route::get('register/customer/details/{customer}', 'User\UserController@view')->name('register.customer.view');
         Route::post('register/customer/email', 'User\UserController@emailStatus')->name('register.customer.email');
-        Route::get('/ads-reports', 'User\PostController@viewReports')->name('user.ads-report');
+        
         Route::get('/register-user', 'User\UserController@registerUsers')->name('user.register-user');
         Route::get('register/customer/{customer}/changePassword', 'User\UserController@changePassCstmr')->name('register.customer.changePass');
         Route::post('register/customer/updatePassword', 'User\UserController@updatePasswordCstmr')->name('register.customer.updatePassword');
@@ -923,13 +930,7 @@ Route::domain($domain)->group(function () {
             Route::post('/language/store', 'Admin\LanguageController@store')->name('admin.language.store');
             Route::post('/language/upload', 'Admin\LanguageController@upload')->name('admin.language.upload');
             Route::post('/language/{id}/uploadUpdate', 'Admin\LanguageController@uploadUpdate')->name('admin.language.uploadUpdate');
-            Route::post(
-                '/language/{id}/default',
-                'Admin\LanguageController
-
-    @default
-        ',
-            )->name('admin.language.default');
+            Route::post('/language/{id}/default', 'Admin\LanguageController@default')->name('admin.language.default');
             Route::post('/language/{id}/delete', 'Admin\LanguageController@delete')->name('admin.language.delete');
             Route::post('/language/update', 'Admin\LanguageController@update')->name('admin.language.update');
             Route::post('/language/{id}/update/keyword', 'Admin\LanguageController@updateKeyword')->name('admin.language.updateKeyword');
@@ -1003,7 +1004,7 @@ Route::domain($domain)->group(function () {
             Route::get('stripe/cancel', 'Payment\StripeController@cancelPayment')->name('membership.stripe.cancel');
             Route::post('paytm/payment-status', 'Payment\PaytmController@paymentStatus')->name('membership.paytm.status');
             Route::get('paystack/success', 'Payment\PaystackController@successPayment')->name('membership.paystack.success');
-            Route::post('mercadopago/cancel', 'Payment\paymenMercadopagoController@cancelPayment')->name('membership.mercadopago.cancel');
+            Route::post('mercadopago/cancel', 'Payment\MercadopagoController@cancelPayment')->name('membership.mercadopago.cancel');
             Route::post('mercadopago/success', 'Payment\MercadopagoController@successPayment')->name('membership.mercadopago.success');
             Route::post('razorpay/success', 'Payment\RazorpayController@successPayment')->name('membership.razorpay.success');
             Route::post('razorpay/cancel', 'Payment\RazorpayController@cancelPayment')->name('membership.razorpay.cancel');
@@ -1085,7 +1086,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
         Route::get('paypal/cancel', 'User\Payment\PaypalController@cancelPayment')->name('customer.appointment.paypal.cancel');
         Route::get('stripe/cancel', 'User\Payment\StripeController@cancelPayment')->name('customer.appointment.stripe.cancel');
         Route::get('paystack/success', 'User\Payment\PaystackController@successPayment')->name('customer.appointment.paystack.success');
-        Route::post('mercadopago/cancel', 'User\Payment\paymenMercadopagoController@cancelPayment')->name('customer.appointment.mercadopago.cancel');
+        Route::post('mercadopago/cancel', 'User\Payment\MercadopagoController@cancelPayment')->name('customer.appointment.mercadopago.cancel');
         Route::post('mercadopago/success', 'User\Payment\MercadopagoController@successPayment')->name('customer.appointment.mercadopago.success');
         Route::post('razorpay/success', 'User\Payment\RazorpayController@successPayment')->name('customer.appointment.razorpay.success');
         Route::post('razorpay/cancel', 'User\Payment\RazorpayController@cancelPayment')->name('customer.appointment.razorpay.cancel');

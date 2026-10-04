@@ -420,7 +420,7 @@ class GatewayController extends Controller
         $idpay->status = $request->status;
         $idpay->information = json_encode([
             'api_key' => $request->api_key,
-            'sandbox' => $request->sandbox_status,
+            'sandbox_status' => $request->sandbox_status,
         ]);
         $idpay->save();
         return back()->with('success', 'IDPay Information Updated Successfully');
@@ -437,7 +437,7 @@ class GatewayController extends Controller
         $nextpay->status = $request->status;
         $nextpay->information = json_encode([
             'api_key' => $request->api_key,
-            'sandbox' => $request->sandbox_status,
+            'sandbox_status' => $request->sandbox_status,
         ]);
         $nextpay->save();
         return back()->with('success', 'NextPay Information Updated Successfully');
@@ -454,7 +454,7 @@ class GatewayController extends Controller
         $payir->status = $request->status;
         $payir->information = json_encode([
             'api_key' => $request->api_key,
-            'sandbox' => $request->sandbox_status,
+            'sandbox_status' => $request->sandbox_status,
         ]);
         $payir->save();
         return back()->with('success', 'Pay.ir Information Updated Successfully');

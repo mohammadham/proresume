@@ -57,9 +57,9 @@ class ProviderController extends Controller
             ->where('status', 1)
             ->whereNotNull('service_type')
             ->with(['apiIntegration'])
-            ->firstOrFail();
+            ->first();
 
-        if (!$provider->apiIntegration || !$provider->apiIntegration->is_active) {
+        if (!$provider || !$provider->apiIntegration || !$provider->apiIntegration->is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'ارائه‌دهنده یافت نشد'

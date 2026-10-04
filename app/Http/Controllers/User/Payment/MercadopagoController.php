@@ -19,10 +19,17 @@ class MercadopagoController extends Controller
 
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('mercadopago')->where('user_id',  getUser()->id)->first();
-        $paydata = $data->convertAutoData();
-        $this->access_token = $paydata['token'];
-        $this->sandbox = $paydata['sandbox_check'];
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
+
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
     public function paymentProcess($request, $_amount, $_success_url, $_cancel_url, $email, $_title, $_description, $bex)

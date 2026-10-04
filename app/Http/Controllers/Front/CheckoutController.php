@@ -42,12 +42,11 @@ use App\Http\Controllers\Payment\MercadopagoController;
 use App\Http\Controllers\Payment\AuthorizenetController;
 use App\Http\Controllers\Payment\PerfectMoneyController;
 use App\Http\Controllers\Payment\MellatController;
-use App\Http\Controllers\User\Payment\IdPayController;
-use App\Http\Controllers\User\Payment\NextPayController;
-use App\Http\Controllers\User\Payment\PayIrController;
-use App\Http\Controllers\User\Payment\ZarinPalController;
-use App\Http\Controllers\User\Payment\ZibalController;
-use App\Http\Controllers\User\Payment\MellatController as UserMellatController;
+use App\Http\Controllers\Payment\IdPayController;
+use App\Http\Controllers\Payment\NextPayController;
+use App\Http\Controllers\Payment\PayIrController;
+use App\Http\Controllers\Payment\ZarinPalController;
+use App\Http\Controllers\Payment\ZibalController;
 
 class CheckoutController extends Controller
 {

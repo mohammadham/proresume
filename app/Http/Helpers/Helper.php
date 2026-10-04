@@ -429,6 +429,16 @@ if (!function_exists('toastrMsg')) {
 if (!function_exists('getUser')) {
     function getUser()
     {
+        // getUser() resolves the profile owner from the *request* URL. There is
+        // no request on the CLI, and the lookups below end in firstOrFail(), so
+        // anything that touches a User\Payment gateway controller from the CLI
+        // (`artisan route:list` instantiates every controller to read its
+        // middleware) used to abort with a ModelNotFoundException. Return null
+        // instead and let the caller decide; HTTP behaviour is untouched.
+        if (app()->runningInConsole()) {
+            return null;
+        }
+
         $parsedUrl = parse_url(url()->current());
 
         $host = $parsedUrl['host'];

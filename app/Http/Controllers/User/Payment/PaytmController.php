@@ -19,14 +19,17 @@ class PaytmController extends Controller
 {
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('paytm')->where('user_id', getUser()->id)->first();
-        $paydata = $data->convertAutoData();
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
 
-        Config::set('services.paytm-wallet.env', $paydata['environment']);
-        Config::set('services.paytm-wallet.merchant_id', $paydata['merchant']);
-        Config::set('services.paytm-wallet.merchant_key', $paydata['secret']);
-        Config::set('services.paytm-wallet.merchant_website', $paydata['website']);
-        Config::set('services.paytm-wallet.industry_type', $paydata['industry']);
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
     public function paymentProcess($request, $_amount, $_item_number, $_callback_url)

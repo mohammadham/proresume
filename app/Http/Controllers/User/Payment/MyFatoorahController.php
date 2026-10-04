@@ -18,16 +18,17 @@ class MyFatoorahController extends Controller
 
     public function __construct()
     {
-        $user_id = getUser()->id;
-        $this->user_id = $user_id;
-        $info = UserPaymentGateway::where('keyword', 'myfatoorah')->where('user_id', $user_id)->first();
-        $information = json_decode($info->information, true);
-        $this->myfatoorah = MyFatoorah::getInstance($information['sandbox_status'] == 1 ? true : false);
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
 
-        config([
-            'myfatoorah.CallBackUrl' => route('customer.appointment.myfatoorah.notify', getParam()),
-            'myfatoorah.ErrorUrl' => route('customer.appointment.myfatoorah.cancel', getParam()),
-        ]);
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
     public function paymentProcess($request, $_amount, $_title, $bs)

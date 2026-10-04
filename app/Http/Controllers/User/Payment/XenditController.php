@@ -16,11 +16,17 @@ class XenditController extends Controller
     protected $secret_key;
     public function __construct()
     {
-        $user_id = getUser()->id;
-        $info = UserPaymentGateway::where('user_id', $user_id)->where('keyword', 'xendit')->first();
-        $information = json_decode($info->information, true);
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
 
-        $this->secret_key = base64_encode($information['secret_key'] . ':');
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
 

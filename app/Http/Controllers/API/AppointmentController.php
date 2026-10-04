@@ -3,14 +3,21 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Customer;
-use App\Models\User\UserTimeSlot;
+use App\Models\User;
 use App\Models\User\AppointmentBooking;
+use App\Models\User\BasicSetting;
+use App\Models\User\Category;
+use App\Models\User\UserTimeSlot;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AppointmentController extends Controller
 {
+    /** Statuses that still occupy a slot (4 = cancelled). */
+    const ACTIVE_STATUSES = [1, 2, 3];
+
     public function slots(Request $request, $providerId)
     {
         $provider = User::where('id', $providerId)
@@ -23,22 +30,29 @@ class AppointmentController extends Controller
         ]);
 
         $date = $request->date;
-        $dayOfWeek = \Carbon\Carbon::parse($date)->format('l');
+        $day = Carbon::parse($date)->format('l');
 
         $slots = UserTimeSlot::where('user_id', $providerId)
-            ->where('day', $dayOfWeek)
-            ->where('is_active', 1)
-            ->orderBy('start_time')
+            ->whereRaw('LOWER(day) = ?', [strtolower($day)])
+            ->orderBy('start')
             ->get();
 
-        $bookedSlots = AppointmentBooking::where('user_id', $providerId)
-            ->where('booking_date', $date)
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->pluck('time_slot_id')
-            ->toArray();
+        // how many active bookings exist per "start - end" label for that date
+        $booked = AppointmentBooking::where('user_id', $providerId)
+            ->where('date', $date)
+            ->whereIn('status', self::ACTIVE_STATUSES)
+            ->get(['time'])
+            ->groupBy('time')
+            ->map(fn ($rows) => $rows->count())
+            ->all();
 
-        $slots->each(function ($slot) use ($bookedSlots) {
-            $slot->is_available = !in_array($slot->id, $bookedSlots);
+        $slots->each(function ($slot) use ($booked) {
+            $label = $slot->start . ' - ' . $slot->end;
+            $taken = $booked[$label] ?? 0;
+
+            $slot->time = $label;
+            $slot->booked_count = $taken;
+            $slot->is_available = $slot->max_booking ? ($taken < $slot->max_booking) : ($taken === 0);
         });
 
         return response()->json([
@@ -46,7 +60,8 @@ class AppointmentController extends Controller
             'data' => [
                 'provider' => $provider,
                 'date' => $date,
-                'slots' => $slots
+                'day' => $day,
+                'slots' => $slots,
             ]
         ]);
     }
@@ -66,42 +81,66 @@ class AppointmentController extends Controller
             ->whereNotNull('service_type')
             ->firstOrFail();
 
+        $user = $request->user();
+        $basicSetting = BasicSetting::where('user_id', $provider->id)->first();
+        $customer = Customer::where('user_id', $user->id)->first();
+
+        $slot = null;
         if ($request->time_slot_id) {
-            $existingBooking = AppointmentBooking::where('user_id', $request->provider_id)
-                ->where('booking_date', $request->booking_date)
-                ->where('time_slot_id', $request->time_slot_id)
-                ->whereIn('status', ['pending', 'confirmed'])
+            $slot = UserTimeSlot::where('id', $request->time_slot_id)
+                ->where('user_id', $provider->id)
                 ->first();
 
-            if ($existingBooking) {
+            if (!$slot) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'این بازه زمانی قبلاً رزرو شده است'
+                    'message' => 'بازه زمانی انتخاب شده متعلق به این ارائه‌دهنده نیست',
+                ], 422);
+            }
+        }
+
+        $slotLabel = $slot ? $slot->start . ' - ' . $slot->end : null;
+
+        if ($slotLabel) {
+            $day = Carbon::parse($request->booking_date)->format('l');
+            if (strtolower($slot->day) !== strtolower($day)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'بازه زمانی برای این روز هفته معتبر نیست',
+                ], 422);
+            }
+
+            $taken = AppointmentBooking::where('user_id', $provider->id)
+                ->where('date', $request->booking_date)
+                ->where('time', $slotLabel)
+                ->whereIn('status', self::ACTIVE_STATUSES)
+                ->count();
+
+            if ($slot->max_booking ? $taken >= $slot->max_booking : $taken > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'این بازه زمانی قبلاً رزرو شده است',
                 ], 409);
             }
         }
 
-        $price = null;
+        $price = $basicSetting->appointment_price ?? 0;
         if ($request->category_id) {
-            $category = \App\Models\User\Category::where('id', $request->category_id)
-                ->where('user_id', $request->provider_id)
+            $category = Category::where('id', $request->category_id)
+                ->where('user_id', $provider->id)
                 ->first();
             if ($category) {
                 $price = $category->appointment_price;
             }
         }
 
-        $customer = Customer::where('user_id', $request->user()->id)->first();
         if (!$customer) {
-            $user = $request->user();
-            $nameParts = explode(' ', $user->name, 2);
-            $firstName = $nameParts[0];
-            $lastName = $nameParts[1] ?? '';
+            $nameParts = explode(' ', trim($user->first_name . ' ' . $user->last_name), 2);
 
             $customer = Customer::create([
                 'user_id' => $user->id,
-                'first_name' => $firstName,
-                'last_name' => $lastName,
+                'first_name' => $nameParts[0],
+                'last_name' => $nameParts[1] ?? '',
                 'email' => $user->email,
                 'password' => $user->password,
                 'contact_number' => $user->phone,
@@ -109,22 +148,39 @@ class AppointmentController extends Controller
             ]);
         }
 
+        $sl = BasicSetting::select(DB::raw("serial_reset, CONCAT('', LPAD(serial_reset + 1, 5, '0')) as slId"))
+            ->where('user_id', $provider->id)
+            ->first();
+        $serialNumber = $sl ? $sl->slId : '00001';
+
         $appointment = AppointmentBooking::create([
-            'user_id' => $request->provider_id,
             'customer_id' => $customer->id,
+            'user_id' => $provider->id,
+            'serial_number' => $serialNumber,
+            'name' => trim($user->first_name . ' ' . $user->last_name) ?: $user->email,
+            'email' => $user->email,
+            'date' => $request->booking_date,
+            'time' => $slotLabel,
             'category_id' => $request->category_id,
-            'booking_date' => $request->booking_date,
-            'time_slot_id' => $request->time_slot_id,
-            'price' => $price,
-            'status' => 'pending',
-            'payment_status' => 0,
-            'notes' => $request->notes,
+            'amount' => 0,
+            'total_amount' => $price,
+            'due_amount' => $price,
+            'details' => $request->notes,
+            'currency' => $basicSetting->currency ?? null,
+            'payment_method' => 'api',
+            'status' => 1,
+            'payment_status' => 1,
         ]);
+
+        if ($sl) {
+            $basicSetting->serial_reset = $sl->serial_reset + 1;
+            $basicSetting->save();
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'نوبت شما با موفقیت ثبت شد',
-            'data' => $appointment
+            'data' => $appointment,
         ], 201);
     }
 
@@ -142,7 +198,7 @@ class AppointmentController extends Controller
 
         $appointments = AppointmentBooking::where('customer_id', $customer->id)
             ->with(['provider', 'category'])
-            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
             ->paginate(20);
 
         return response()->json([
@@ -150,4 +206,4 @@ class AppointmentController extends Controller
             'data' => $appointments
         ]);
     }
-}
+}

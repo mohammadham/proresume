@@ -3,6 +3,11 @@
         Options -MultiViews
     </IfModule>
     RewriteEngine On
+
+    # Pass the Authorization header through to PHP so API bearer tokens work
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
     RewriteCond %{REQUEST_FILENAME} -d [OR]
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ ^$1 [N]

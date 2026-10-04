@@ -32,22 +32,17 @@ class MellatController extends Controller
 
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('mellat')
-            ->where('user_id', getUser()->id)
-            ->first();
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
 
-        if ($data) {
-            $paydata = $data->convertAutoData();
-            $this->terminal_id = $paydata['terminal_id'] ?? '';
-            $this->username = $paydata['username'] ?? '';
-            $this->password = $paydata['password'] ?? '';
-            $this->description = $paydata['text'] ?? 'پرداخت اشتراک';
-            $this->sandbox_mode = $paydata['sandbox_status'] ?? 1;
-            $this->callback_url = $paydata['callback_url'] ?? route('customer.appointment.mellat.notify');
+        if (empty($gatewayOwner)) {
+            return;
         }
-
-        // Bank Mellat SADAD WSDL URL (same for sandbox and production)
-        $this->wsdl_url = 'https://bpm.shaparak.ir/pgwchannel/services/pgw?wsdl';
     }
 
     public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)

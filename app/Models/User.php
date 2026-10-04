@@ -13,12 +13,13 @@ use App\Models\User\UserOfflinePaymentGateway;
 use App\Models\User\UserPaymentGateway;
 use App\Notifications\UserResetPassword;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class User extends Authenticatable
 {
-    use Notifiable;
+    use Notifiable, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.

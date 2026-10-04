@@ -26,7 +26,7 @@ class ApiIntegrationController extends Controller
             }
         }
 
-        return view('user.settings.api-integration', compact('data', 'provinces', 'cities'));
+        return view('user.settings.api-integration', compact('user', 'data', 'provinces', 'cities'));
     }
 
     public function update(Request $request)
@@ -49,6 +49,10 @@ class ApiIntegrationController extends Controller
         $integration->app_type = $request->app_type;
         $integration->is_active = $request->has('is_active');
         $integration->save();
+
+        // the public API filters providers by users.service_type, keep both in sync
+        $user->service_type = $request->app_type;
+        $user->save();
 
         return redirect()->back()->with('success', 'تنظیمات با موفقیت ذخیره شد');
     }
@@ -81,8 +85,12 @@ class ApiIntegrationController extends Controller
             'lng' => 'nullable|numeric|between:-180,180',
         ]);
 
+        // keep service_type aligned with the integration app type unless one is submitted
+        $integration = ApiIntegration::where('user_id', $user->id)->first();
+        $serviceType = $request->service_type ?: ($integration->app_type ?? $user->service_type);
+
         $user->update([
-            'service_type' => $request->service_type,
+            'service_type' => $serviceType,
             'specialty' => $request->specialty,
             'state' => $request->state,
             'city' => $request->city,

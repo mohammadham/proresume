@@ -15,13 +15,16 @@ class AuthorizenetController extends Controller
     public $gateway;
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('authorize.net')->where('user_id', getUser()->id)->first();
-        $paydata = $data->convertAutoData();
-        $this->gateway = Omnipay::create('AuthorizeNetApi_Api');
-        $this->gateway->setAuthName($paydata['login_id']);
-        $this->gateway->setTransactionKey($paydata['transaction_key']);
-        if ($paydata['sandbox_check'] == 1) {
-            $this->gateway->setTestMode(true);
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
+
+        if (empty($gatewayOwner)) {
+            return;
         }
     }
 

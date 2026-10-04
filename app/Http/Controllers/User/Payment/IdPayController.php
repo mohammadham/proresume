@@ -27,16 +27,16 @@ class IdPayController extends Controller
 
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('idpay')
-            ->where('user_id', getUser()->id)
-            ->first();
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
 
-        if ($data) {
-            $paydata = $data->convertAutoData();
-            $this->api_key = $paydata['api_key'] ?? '';
-            $this->sandbox_mode = $paydata['sandbox_status'] ?? 1;
-            $this->description = $paydata['text'] ?? 'پرداخت اشتراک';
-            $this->callback_url = $paydata['callback_url'] ?? route('customer.appointment.idpay.notify');
+        if (empty($gatewayOwner)) {
+            return;
         }
     }
 

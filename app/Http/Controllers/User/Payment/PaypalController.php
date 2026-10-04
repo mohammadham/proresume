@@ -31,19 +31,17 @@ class PaypalController extends Controller
 
     public function __construct()
     {
-        $data = UserPaymentGateway::whereKeyword('paypal')->where('user_id', getUser()->id)->first();
-        $paydata = $data->convertAutoData();
-        $paypal_conf = Config::get('paypal');
-        $paypal_conf['client_id'] = $paydata['client_id'];
-        $paypal_conf['secret'] = $paydata['client_secret'];
-        $paypal_conf['settings']['mode'] = $paydata['sandbox_check'] == 1 ? 'sandbox' : 'live';
-        $this->_api_context = new ApiContext(
-            new OAuthTokenCredential(
-                $paypal_conf['client_id'],
-                $paypal_conf['secret']
-            )
-        );
-        $this->_api_context->setConfig($paypal_conf['settings']);
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
+
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
     public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)

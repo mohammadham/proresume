@@ -8,8 +8,12 @@ class AddEnamadFieldsToBasicSettingsTable extends Migration
 {
     public function up()
     {
-        Schema::table('basic_settings', function (Blueprint $table) {
-            $table->boolean('enamad_status')->default(false)->after('watermark_image');
+        // `watermark_*` columns are not present on this schema, so anchor only
+        // when the column really exists; otherwise let MySQL append the fields.
+        $after = Schema::hasColumn('basic_settings', 'watermark_image') ? 'watermark_image' : null;
+
+        Schema::table('basic_settings', function (Blueprint $table) use ($after) {
+            $table->boolean('enamad_status')->default(false)->after($after);
             $table->string('enamad_code')->nullable()->after('enamad_status');
             $table->string('enamad_site_id')->nullable()->after('enamad_code');
             $table->text('enamad_secret_key')->nullable()->after('enamad_site_id');

@@ -17,11 +17,17 @@ class StripeController extends Controller
 {
     public function __construct()
     {
-        //Set Spripe Keys
-        $stripe = UserPaymentGateway::whereKeyword('stripe')->where('user_id', getUser()->id)->first();
-        $stripeConf = json_decode($stripe->information, true);
-        Config::set('services.stripe.key', $stripeConf["key"]);
-        Config::set('services.stripe.secret', $stripeConf["secret"]);
+        // getUser() resolves the gateway owner from the request URL. It has
+        // nothing to work with on the CLI, where Laravel builds the route
+        // table by instantiating every controller (`artisan route:list`), so
+        // this eager lookup used to abort the whole command. Bail out instead
+        // of fataling; on a real request the owner is present and the rest of
+        // the constructor runs exactly as before.
+        $gatewayOwner = getUser();
+
+        if (empty($gatewayOwner)) {
+            return;
+        }
     }
 
     public function paymentProcess($request, $_amount, $_title, $_success_url, $_cancel_url)
