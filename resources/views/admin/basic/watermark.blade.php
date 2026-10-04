@@ -64,7 +64,7 @@
 
                             <div class="form-group">
                                 <label>{{ __('Watermark Image') }}</label>
-                                <input type="file" class="form-control" name="watermark_image" accept="image/*">
+                                <input type="file" class="form-control" name="watermark_image" accept=".jpg,.jpeg,.png">
                                 @if ($errors->has('watermark_image'))
                                     <p class="mb-0 text-danger">{{$errors->first('watermark_image')}}</p>
                                 @endif

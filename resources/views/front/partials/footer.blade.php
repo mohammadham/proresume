@@ -62,11 +62,14 @@
     </div>
     @endif
 
+    {{-- Admin-configured watermark badge. Base path is the admin upload
+         dir; the user profile layouts pass the user upload dir instead. --}}
     @include('partials.watermark', [
         'watermark_status' => $bs->watermark_status ?? 0,
         'watermark_text' => $bs->watermark_text ?? '',
         'watermark_url' => $bs->watermark_url ?? '',
         'watermark_image' => $bs->watermark_image ?? '',
+        'watermark_base' => 'assets/front/img/',
     ])
 
     {{-- Enamad trust-seal badge. The partial existed but was never included

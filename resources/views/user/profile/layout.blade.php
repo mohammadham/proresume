@@ -209,5 +209,14 @@
         </script>
         @endif
         @yield('scripts')
-    </body>
+        {{-- User-configured watermark badge: the profile owner's settings row.
+         Base path must point at the user watermark upload dir. --}}
+    @include('partials.watermark', [
+        'watermark_status' => $userBs->watermark_status ?? 0,
+        'watermark_text' => $userBs->watermark_text ?? '',
+        'watermark_url' => $userBs->watermark_url ?? '',
+        'watermark_image' => $userBs->watermark_image ?? '',
+        'watermark_base' => 'assets/front/img/user/watermark/',
+    ])
+</body>
 </html>

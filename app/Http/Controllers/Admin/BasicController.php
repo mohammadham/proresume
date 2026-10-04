@@ -437,10 +437,14 @@ class BasicController extends Controller
             'watermark_status' => 'required|integer',
             'watermark_text' => 'nullable|string|max:100',
             'watermark_url' => 'nullable|url|max:255',
-            'watermark_image' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+            'watermark_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        $bs = BasicSetting::first();
+        // SVG was dropped from the allowed mimes: browsers execute scripts
+        // inside SVG files served inline, so an uploaded .svg would become
+        // stored XSS. firstOrFail() so a missing row 404s instead of
+        // fatally dereferencing null below.
+        $bs = BasicSetting::firstOrFail();
 
         // Handle image upload
         if ($request->hasFile('watermark_image')) {

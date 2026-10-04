@@ -112,15 +112,15 @@ class BasicSettingController extends Controller
             'watermark_status' => 'required|integer',
             'watermark_text' => 'nullable|string|max:100',
             'watermark_url' => 'nullable|url|max:255',
-            'watermark_image' => 'nullable|image|mimes:jpg,jpeg,png,svg|max:2048',
+            'watermark_image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        $bs = BasicSetting::where('user_id', Auth::id())->first();
-
-        if (!$bs) {
-            $bs = new BasicSetting();
-            $bs->user_id = Auth::id();
-        }
+        // SVG was dropped from the allowed mimes: browsers execute scripts
+        // inside SVG files served inline, so an uploaded .svg would become
+        // stored XSS on the public profile. updateOrCreate (same pattern as
+        // updateEnamad) also replaces the legacy first()+new block that
+        // could insert a second settings row for the same user.
+        $bs = BasicSetting::updateOrCreate(['user_id' => Auth::id()]);
 
         // Handle image upload
         if ($request->hasFile('watermark_image')) {
