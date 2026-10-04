@@ -68,4 +68,13 @@
         'watermark_url' => $bs->watermark_url ?? '',
         'watermark_image' => $bs->watermark_image ?? '',
     ])
+
+    {{-- Enamad trust-seal badge. The partial existed but was never included
+         anywhere, so the badge configured in the admin panel never rendered.
+         Reads the site-wide (admin) settings row, same as the watermark. --}}
+    @include('partials.enamad', [
+        'enamadStatus' => $bs->enamad_status ?? 0,
+        'enamadSiteId' => $bs->enamad_site_id ?? '',
+        'enamadLogoType' => $bs->enamad_logo_type ?? 'auto',
+    ])
 </footer><!--====== End Footer ======-->

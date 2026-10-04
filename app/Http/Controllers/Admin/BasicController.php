@@ -487,10 +487,19 @@ class BasicController extends Controller
         $bs->enamad_status = $request->enamad_status;
         $bs->enamad_code = $request->enamad_code;
         $bs->enamad_site_id = $request->enamad_site_id;
-        $bs->enamad_secret_key = $request->enamad_secret_key;
+        // The form renders the secret as an empty password field, so a blank
+        // submit means "keep the current key", not "erase the credentials".
+        $bs->enamad_secret_key = $request->filled('enamad_secret_key')
+            ? $request->enamad_secret_key
+            : $bs->enamad_secret_key;
         $bs->enamad_expire_date = $request->enamad_expire_date;
         $bs->enamad_logo_type = $request->enamad_logo_type;
         $bs->save();
+
+        // Settings changed: the status endpoint caches for an hour and must not
+        // keep serving the previous badge configuration.
+        \Illuminate\Support\Facades\Cache::forget(config('enamad.cache.prefix') . 'status');
+        \Illuminate\Support\Facades\Cache::forget('enamad_status');
 
         Session::flash('success', __('Updated successfully!'));
         return back();

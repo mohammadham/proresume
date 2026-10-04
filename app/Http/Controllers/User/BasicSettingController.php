@@ -146,7 +146,7 @@ class BasicSettingController extends Controller
 
     public function enamad()
     {
-        $data = UserBasicSetting::where('user_id', Auth::guard('web')->user()->id)->first();
+        $data = BasicSetting::where('user_id', Auth::guard('web')->user()->id)->first();
         return view('user.settings.enamad', compact('data'));
     }
 
@@ -162,17 +162,26 @@ class BasicSettingController extends Controller
         ]);
 
         $user = Auth::guard('web')->user();
-        $bs = UserBasicSetting::where('user_id', $user->id)->first();
 
-        if (!$bs) {
-            $bs = new UserBasicSetting();
-            $bs->user_id = $user->id;
-        }
+        // This used to reference "UserBasicSetting" - a class that exists
+        // nowhere (no import, no alias), so opening or saving this form
+        // fatalled. The imported App\Models\User\BasicSetting is the model,
+        // and updateOrCreate keeps duplicate rows per user from re-appearing
+        // (one user already had two rows from the legacy create-path).
+        // The public badge only ever reads the admin row, so no cache clearing
+        // is needed on this path.
+        $bs = BasicSetting::updateOrCreate(
+            ['user_id' => $user->id]
+        );
 
         $bs->enamad_status = $request->enamad_status;
         $bs->enamad_code = $request->enamad_code;
         $bs->enamad_site_id = $request->enamad_site_id;
-        $bs->enamad_secret_key = $request->enamad_secret_key;
+        // The form renders the secret as an empty password field, so a blank
+        // submit means "keep the current key", not "erase the credentials".
+        $bs->enamad_secret_key = $request->filled('enamad_secret_key')
+            ? $request->enamad_secret_key
+            : $bs->enamad_secret_key;
         $bs->enamad_expire_date = $request->enamad_expire_date;
         $bs->enamad_logo_type = $request->enamad_logo_type;
         $bs->save();

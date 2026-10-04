@@ -56,7 +56,7 @@ class EnamadController extends Controller
                     $updateData['enamad_expire_date'] = $expireDate;
                 }
                 
-                BasicSetting::first()->update($updateData);
+                $bs->update($updateData);
                 
                 // Clear cache
                 Cache::forget('enamad_status');
@@ -110,12 +110,10 @@ class EnamadController extends Controller
      */
     public function status()
     {
-        $cacheKey = 'enamad_status';
-        
-        return Cache::remember($this->config['cache']['prefix'] . 'status', 
+        return Cache::remember($this->config['cache']['prefix'] . 'status',
             $this->config['cache']['status_ttl'], function () {
             $bs = BasicSetting::first();
-            
+
             return [
                 'enamad_status' => $bs->enamad_status ?? 0,
                 'enamad_code' => $bs->enamad_code ?? '',

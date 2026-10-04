@@ -24,6 +24,11 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        // config/enamad.php promises a 24h re-verification interval; this is the
+        // implementation of that promise (requires the cron entry to be installed).
+        $schedule->command('enamad:verify')
+            ->daily();
+
         $schedule->command('expire:user')
             ->daily();
     }
