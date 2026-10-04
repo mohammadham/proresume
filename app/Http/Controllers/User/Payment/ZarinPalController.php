@@ -35,7 +35,15 @@ class ZarinPalController extends Controller
         // this eager lookup used to abort the whole command. Bail out instead
         // of fataling; on a real request the owner is present and the rest of
         // the constructor runs exactly as before.
-        $gatewayOwner = getUser();
+        try {
+            $gatewayOwner = getUser();
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            // getUser() resolves the owner from the request URL and throws when
+            // the first path segment is not a profile. Gateway callbacks such as
+            // /zarinpal/notify are reached outside any profile URL, so treat
+            // that as "no owner" rather than rendering a 404.
+            $gatewayOwner = null;
+        }
 
         if (empty($gatewayOwner)) {
             return;
@@ -131,7 +139,7 @@ class ZarinPalController extends Controller
         }
     }
 
-    public function successPayment($request)
+    public function successPayment(Request $request)
     {
         $requestData = Session::get('request');
         $currentLang = session()->has('lang') ? Language::where('code', session()->get('lang'))->first() : Language::where('is_default', 1)->first();
@@ -296,15 +304,22 @@ class ZarinPalController extends Controller
             }
         }
 
-        if ($paymentFor == 'membership') {
+        // The cancel URL is a public gateway callback: it can be opened cold (no
+        // session) or long after the checkout session expired. Fall back to the
+        // pricing page instead of reading offsets off a null array.
+        $requestData = is_array($requestData) ? $requestData : [];
+
+        if ($paymentFor == 'membership' && !empty($requestData['package_id'])) {
             return redirect()
-                ->route('front.register.view', ['status' => $requestData['package_type'], 'id' => $requestData['package_id']])
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'default', 'id' => $requestData['package_id']])
                 ->withInput($requestData);
-        } else {
+        } elseif (!empty($requestData['package_id'])) {
             return redirect()
                 ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id']])
                 ->withInput($requestData);
         }
+
+        return redirect()->route('front.pricing');
     }
 
     /**

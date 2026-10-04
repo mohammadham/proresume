@@ -156,14 +156,21 @@ class MyFatoorahController extends Controller
         $requestData = Session::get('request');
         $paymentFor = Session::get('paymentFor');
         session()->flash('warning', __('cancel_payment'));
-        if ($paymentFor == 'membership') {
+
+        // The cancel URL is a public gateway callback: it can be opened cold (no
+        // session) or long after the checkout session expired.
+        $requestData = is_array($requestData) ? $requestData : [];
+
+        if ($paymentFor == 'membership' && !empty($requestData['package_id'])) {
             return redirect()
-                ->route('front.register.view', ['status' => $requestData['package_type'], 'id' => $requestData['package_id']])
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'default', 'id' => $requestData['package_id']])
                 ->withInput($requestData);
-        } else {
+        } elseif (!empty($requestData['package_id'])) {
             return redirect()
                 ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id']])
                 ->withInput($requestData);
         }
+
+        return redirect()->route('front.pricing');
     }
 }

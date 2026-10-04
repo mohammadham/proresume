@@ -23,7 +23,7 @@ Route::fallback(function () {
 
 
 
-Route::get('/myfatoorah/cancel', 'Payment\MyFatoorahController@cancel')->name('membership.myfatoorah.cancel');
+Route::get('/myfatoorah/cancel', 'Payment\MyFatoorahController@cancelPayment')->name('membership.myfatoorah.cancel');
 Route::get('/myfatoorah/callback', 'Payment\MyFatoorahController@successPayment');
 Route::get('/check-payment', 'CronJobController@checkPayment')->name('cron.check_payment');
 

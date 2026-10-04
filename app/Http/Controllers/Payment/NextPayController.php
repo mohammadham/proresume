@@ -149,10 +149,10 @@ class NextPayController extends Controller
             $msg = $e->getMessage();
             if ($msg === 'TRANSACTION_NOT_FOUND') {
                 Log::channel('payment')->warning('NextPay callback: transaction not found', ['payment_id' => $paymentId]);
-                return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+                return redirect()->route('front.pricing')->with('error', 'تراکنش یافت نشد.');
             }
             Log::channel('payment')->info('NextPay callback: duplicate/already processed', ['payment_id' => $paymentId, 'state' => $msg]);
-            return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
+            return redirect()->route('front.pricing')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '0') {
@@ -186,14 +186,14 @@ class NextPayController extends Controller
                         'tracking_code' => $paymentId,
                     ]);
 
-                    return redirect()->route('user.gateways')
+                    return redirect()->route('front.pricing')
                         ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . $paymentId);
                 } else {
                     $transaction->update(['status' => 'failed']);
                     $error_message = !$amountOk
                         ? 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.'
                         : ($result['message'] ?? 'پرداخت تایید نشد.');
-                    return redirect()->route('user.gateways')
+                    return redirect()->route('front.pricing')
                         ->with('error', $error_message);
                 }
             } catch (\Exception $e) {
@@ -202,7 +202,7 @@ class NextPayController extends Controller
                     'trans_id' => $paymentId,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect()->route('user.gateways')
+                return redirect()->route('front.pricing')
                     ->with('error', 'خطا در تایید پرداخت. لطفاً مجدداً تلاش کنید.');
             }
         } else {
@@ -218,13 +218,33 @@ class NextPayController extends Controller
                 '8' => 'خطای داخلی سیستم.',
             ];
             $error = $error_messages[$status] ?? 'پرداخت ناموفق بود. کد وضعیت: ' . $status;
-            return redirect()->route('user.gateways')->with('error', $error);
+            return redirect()->route('front.pricing')->with('error', $error);
         }
     }
 
     public function cancel(Request $request)
     {
-        return redirect()->route('user.gateways')->with('error', 'پرداخت توسط کاربر لغو شد.');
+        // The cancel URL is a public gateway callback: it can be opened cold (no
+        // session) or long after the checkout session expired. `user.gateways`
+        // (the tenant's settings page) is not a route at all, so this used to
+        // throw a RouteNotFoundException - a 500 on every abandoned payment.
+        $requestData = session()->get('request');
+        $requestData = is_array($requestData) ? $requestData : [];
+        $paymentFor = session()->get('paymentFor');
+
+        session()->flash('warning', __('cancel_payment'));
+
+        if ($paymentFor == 'membership' && !empty($requestData['package_id'])) {
+            return redirect()
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'default', 'id' => $requestData['package_id']])
+                ->withInput($requestData);
+        } elseif (!empty($requestData['package_id'])) {
+            return redirect()
+                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id']])
+                ->withInput($requestData);
+        }
+
+        return redirect()->route('front.pricing');
     }
 
     /**

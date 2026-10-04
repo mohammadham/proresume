@@ -148,7 +148,7 @@ class PayIrController extends Controller
 
         if (!$token) {
             Log::channel('payment')->warning('Pay.ir callback: missing token');
-            return redirect()->route('user.gateways')->with('error', 'اطلاعات پرداخت ناقص است.');
+            return redirect()->route('front.pricing')->with('error', 'اطلاعات پرداخت ناقص است.');
         }
 
         // P1-5: Idempotency — lockForUpdate + status check
@@ -171,10 +171,10 @@ class PayIrController extends Controller
             $msg = $e->getMessage();
             if ($msg === 'TRANSACTION_NOT_FOUND') {
                 Log::channel('payment')->warning('Pay.ir callback: transaction not found', ['token' => $token]);
-                return redirect()->route('user.gateways')->with('error', 'تراکنش یافت نشد.');
+                return redirect()->route('front.pricing')->with('error', 'تراکنش یافت نشد.');
             }
             Log::channel('payment')->info('Pay.ir callback: duplicate/already processed', ['token' => $token, 'state' => $msg]);
-            return redirect()->route('user.gateways')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
+            return redirect()->route('front.pricing')->with('warning', 'این تراکنش قبلاً پردازش شده است.');
         }
 
         if ($status == '1' || $status == 1) {
@@ -210,7 +210,7 @@ class PayIrController extends Controller
                             'verified' => $verifiedAmount,
                             'expected' => $expectedAmount,
                         ]);
-                        return redirect()->route('user.gateways')
+                        return redirect()->route('front.pricing')
                             ->with('error', 'مبلغ تایید شده با سفارش هم‌خوانی ندارد.');
                     }
 
@@ -219,7 +219,7 @@ class PayIrController extends Controller
                         'tracking_code' => $result['transId'] ?? $token,
                     ]);
 
-                    return redirect()->route('user.gateways')
+                    return redirect()->route('front.pricing')
                         ->with('success', 'پرداخت با موفقیت انجام شد. کد رهگیری: ' . ($result['transId'] ?? $token));
                 }
 
@@ -228,14 +228,14 @@ class PayIrController extends Controller
                     'token'  => $token,
                     'result' => $result,
                 ]);
-                return redirect()->route('user.gateways')->with('error', 'پرداخت تایید نشد.');
+                return redirect()->route('front.pricing')->with('error', 'پرداخت تایید نشد.');
             } catch (\Exception $e) {
                 $transaction->update(['status' => 'failed']);
                 Log::channel('payment')->error('Pay.ir verification error (admin, v2)', [
                     'token' => $token,
                     'error' => $e->getMessage(),
                 ]);
-                return redirect()->route('user.gateways')
+                return redirect()->route('front.pricing')
                     ->with('error', 'خطا در تایید پرداخت. لطفاً با پشتیبانی تماس بگیرید.');
             }
         }
@@ -254,12 +254,32 @@ class PayIrController extends Controller
             '-8' => 'خطای داخلی سیستم.',
         ];
         $error = $error_messages[$status] ?? ('پرداخت ناموفق بود. کد وضعیت: ' . $status);
-        return redirect()->route('user.gateways')->with('error', $error);
+        return redirect()->route('front.pricing')->with('error', $error);
     }
 
     public function cancel(Request $request)
     {
-        return redirect()->route('user.gateways')->with('error', 'پرداخت توسط کاربر لغو شد.');
+        // The cancel URL is a public gateway callback: it can be opened cold (no
+        // session) or long after the checkout session expired. `user.gateways`
+        // (the tenant's settings page) is not a route at all, so this used to
+        // throw a RouteNotFoundException - a 500 on every abandoned payment.
+        $requestData = session()->get('request');
+        $requestData = is_array($requestData) ? $requestData : [];
+        $paymentFor = session()->get('paymentFor');
+
+        session()->flash('warning', __('cancel_payment'));
+
+        if ($paymentFor == 'membership' && !empty($requestData['package_id'])) {
+            return redirect()
+                ->route('front.register.view', ['status' => $requestData['package_type'] ?? 'default', 'id' => $requestData['package_id']])
+                ->withInput($requestData);
+        } elseif (!empty($requestData['package_id'])) {
+            return redirect()
+                ->route('user.plan.extend.checkout', ['package_id' => $requestData['package_id']])
+                ->withInput($requestData);
+        }
+
+        return redirect()->route('front.pricing');
     }
 
     /**

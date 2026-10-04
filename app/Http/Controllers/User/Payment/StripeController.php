@@ -23,7 +23,15 @@ class StripeController extends Controller
         // this eager lookup used to abort the whole command. Bail out instead
         // of fataling; on a real request the owner is present and the rest of
         // the constructor runs exactly as before.
-        $gatewayOwner = getUser();
+        try {
+            $gatewayOwner = getUser();
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            // getUser() resolves the owner from the request URL and throws when
+            // the first path segment is not a profile. Gateway callbacks such as
+            // /zarinpal/notify are reached outside any profile URL, so treat
+            // that as "no owner" rather than rendering a 404.
+            $gatewayOwner = null;
+        }
 
         if (empty($gatewayOwner)) {
             return;

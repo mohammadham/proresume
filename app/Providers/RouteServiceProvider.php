@@ -77,9 +77,15 @@ class RouteServiceProvider extends ServiceProvider
     {
         $this->mapApiRoutes();
 
-        $this->mapWebRoutes();
-
+        // Gateway callbacks are registered BEFORE the web routes on purpose.
+        // On a path-based install routes/web.php re-registers a whole group with
+        // a '/{username}' prefix, which produces catch-alls like
+        // '/{username}/success'. Laravel keeps the first matching route, so if
+        // web.php went first it would swallow /zarinpal/success, /zibal/success
+        // ... and the customer would land on a 404 instead of their receipt.
         $this->mapPaymentGatewayRoutes();
+
+        $this->mapWebRoutes();
 
         //
     }
