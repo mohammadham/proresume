@@ -252,6 +252,11 @@
                                         <span class="sub-item">یکپارچگی اپ موبایل</span>
                                     </a>
                                 </li>
+                                <li class="{{ request()->routeIs('user.enamad') ? 'active' : '' }}">
+                                    <a href="{{ route('user.enamad', ['language' => $default->code]) }}">
+                                        <span class="sub-item">{{ __('Enamad Settings') }}</span>
+                                    </a>
+                                </li>
                                 <li class="@if (request()->path() == 'user/basic_settings/seo') active @endif">
                                     <a href="{{ route('admin.basic_settings.seo', ['language' => $default->code]) }}">
                                         <span class="sub-item">{{ __('SEO Information') }}</span>

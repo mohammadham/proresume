@@ -107,6 +107,12 @@ return [
             'level'  => 'debug',
             'days'   => 30,
         ],
+        'enamad' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/enamad.log'),
+            'level'  => 'debug',
+            'days'   => 30,
+        ],
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

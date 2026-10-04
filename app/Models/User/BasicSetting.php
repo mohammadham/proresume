@@ -21,7 +21,13 @@ class BasicSetting extends Model
         'watermark_status',
         'watermark_text',
         'watermark_url',
-        'watermark_image'
+        'watermark_image',
+        'enamad_status',
+        'enamad_code',
+        'enamad_site_id',
+        'enamad_secret_key',
+        'enamad_expire_date',
+        'enamad_logo_type'
     ];
 
     public function language()

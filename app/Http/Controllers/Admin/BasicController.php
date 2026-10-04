@@ -465,6 +465,38 @@ class BasicController extends Controller
     }
 
 
+    public function enamad()
+    {
+        $data['abs'] = BasicSetting::firstOrFail();
+        return view('admin.basic.enamad', $data);
+    }
+
+    public function updateEnamad(Request $request)
+    {
+        $request->validate([
+            'enamad_status' => 'required|integer',
+            'enamad_code' => 'nullable|string|max:100',
+            'enamad_site_id' => 'nullable|string|max:100',
+            'enamad_secret_key' => 'nullable|string',
+            'enamad_expire_date' => 'nullable|date',
+            'enamad_logo_type' => 'nullable|in:auto,light,dark',
+        ]);
+
+        $bs = BasicSetting::first();
+
+        $bs->enamad_status = $request->enamad_status;
+        $bs->enamad_code = $request->enamad_code;
+        $bs->enamad_site_id = $request->enamad_site_id;
+        $bs->enamad_secret_key = $request->enamad_secret_key;
+        $bs->enamad_expire_date = $request->enamad_expire_date;
+        $bs->enamad_logo_type = $request->enamad_logo_type;
+        $bs->save();
+
+        Session::flash('success', __('Updated successfully!'));
+        return back();
+    }
+
+
     public function cookiealert(Request $request)
     {
         $lang = Language::where('code', $request->language)->firstOrFail();

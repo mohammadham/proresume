@@ -143,4 +143,41 @@ class BasicSettingController extends Controller
         Session::flash('success', __('Updated successfully!'));
         return back();
     }
+
+    public function enamad()
+    {
+        $data = UserBasicSetting::where('user_id', Auth::guard('web')->user()->id)->first();
+        return view('user.settings.enamad', compact('data'));
+    }
+
+    public function updateEnamad(Request $request)
+    {
+        $request->validate([
+            'enamad_status' => 'required|integer',
+            'enamad_code' => 'nullable|string|max:100',
+            'enamad_site_id' => 'nullable|string|max:100',
+            'enamad_secret_key' => 'nullable|string',
+            'enamad_expire_date' => 'nullable|date',
+            'enamad_logo_type' => 'nullable|in:auto,light,dark',
+        ]);
+
+        $user = Auth::guard('web')->user();
+        $bs = UserBasicSetting::where('user_id', $user->id)->first();
+
+        if (!$bs) {
+            $bs = new UserBasicSetting();
+            $bs->user_id = $user->id;
+        }
+
+        $bs->enamad_status = $request->enamad_status;
+        $bs->enamad_code = $request->enamad_code;
+        $bs->enamad_site_id = $request->enamad_site_id;
+        $bs->enamad_secret_key = $request->enamad_secret_key;
+        $bs->enamad_expire_date = $request->enamad_expire_date;
+        $bs->enamad_logo_type = $request->enamad_logo_type;
+        $bs->save();
+
+        Session::flash('success', __('Updated successfully!'));
+        return back();
+    }
 }

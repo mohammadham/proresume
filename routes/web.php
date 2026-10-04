@@ -61,6 +61,12 @@ Route::domain($domain)->group(function () {
         Route::view('/success', 'front.success')->name('success.page');
     });
 
+    // Enamad Routes (Public API)
+    Route::post('/enamad/verify', 'EnamadController@verify')->name('enamad.verify');
+    Route::get('/enamad/status', 'EnamadController@status')->name('enamad.status');
+    Route::get('/enamad/logo', 'EnamadController@logo')->name('enamad.logo');
+    Route::post('/enamad/verify/manual', 'EnamadController@manualVerify')->name('enamad.verify.manual');
+
     Route::group(['middleware' => ['web', 'guest', 'setlang']], function () {
         Route::get('/registration/final-step', 'Front\FrontendController@step2')->name('front.registration.step2');
         Route::post('/checkout', 'Front\FrontendController@checkout')->name('front.checkout.view');
@@ -305,6 +311,10 @@ Route::domain($domain)->group(function () {
         // user watermark routes
         Route::get('/watermark', 'User\BasicSettingController@watermark')->name('user.watermark');
         Route::post('/watermark/update', 'User\BasicSettingController@updateWatermark')->name('user.watermark.update');
+
+        // user enamad routes
+        Route::get('/enamad', 'User\BasicSettingController@enamad')->name('user.enamad');
+        Route::post('/enamad/update', 'User\BasicSettingController@updateEnamad')->name('user.enamad.update');
 
         //user preference
         Route::get('preference', 'User\PreferenceController@index')->name('user.preference.index');
@@ -602,6 +612,10 @@ Route::domain($domain)->group(function () {
             // Admin Watermark Routes
             Route::get('/watermark', 'Admin\BasicController@watermark')->name('admin.watermark');
             Route::post('/watermark/update', 'Admin\BasicController@updateWatermark')->name('admin.watermark.update');
+
+            // Admin Enamad Routes
+            Route::get('/enamad', 'Admin\BasicController@enamad')->name('admin.enamad');
+            Route::post('/enamad/update', 'Admin\BasicController@updateEnamad')->name('admin.enamad.update');
 
             // Admin Email Settings Routes
             Route::get('/mail-from-admin', 'Admin\EmailController@mailFromAdmin')->name('admin.mailFromAdmin');

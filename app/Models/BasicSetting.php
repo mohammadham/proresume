@@ -43,7 +43,13 @@ class BasicSetting extends Model
         'user_registraion_countries',
         'user_registration_deactive_img',
         'user_registration_deactive_text',
-        'user_login_attempts'
+        'user_login_attempts',
+        'enamad_status',
+        'enamad_code',
+        'enamad_site_id',
+        'enamad_secret_key',
+        'enamad_expire_date',
+        'enamad_logo_type'
     ];
 
     public function language()
