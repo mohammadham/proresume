@@ -45,8 +45,28 @@ class EnamadController extends Controller
 
             if ($response->successful()) {
                 $result = $response->json();
-                
-                $status = $result['status'] ?? 'unknown';
+
+                // Same guard as `enamad:verify`: a 200 with an unusable body
+                // (empty payload, an HTML error page, JSON without 'status')
+                // used to fall through to status=unknown and report success
+                // while writing enamad_status=0 over a perfectly good seal.
+                // An unreadable upstream answer is a failed verification, not
+                // a verdict: log it, answer 502 and leave the stored row and
+                // the status cache exactly as they were.
+                if (!is_array($result) || !array_key_exists('status', $result)) {
+                    Log::channel('enamad')->error('Enamad verification returned a malformed payload', [
+                        'http_status' => $response->status(),
+                        'body' => substr($response->body(), 0, 500),
+                        'domain' => request()->getHost(),
+                    ]);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'پاسخ سرور ایناماد نامعتبر بود و وضعیت ذخیره‌شده تغییر نکرد.',
+                    ], 502);
+                }
+
+                $status = $result['status'];
                 $expireDate = $result['expire_date'] ?? null;
                 
                 // Update basic settings
@@ -57,11 +77,11 @@ class EnamadController extends Controller
                 }
                 
                 $bs->update($updateData);
-                
+
                 // Clear cache
                 Cache::forget('enamad_status');
                 Cache::forget('enamad_verify');
-                
+
                 Log::channel('enamad')->info('Enamad verification completed', [
                     'status' => $status,
                     'expire_date' => $expireDate,
@@ -78,7 +98,10 @@ class EnamadController extends Controller
                     ]
                 ]);
             } else {
-                $error = $response->json()['message'] ?? 'خطا در ارتباط با سرور ایناماد';
+                // json('message') instead of json()['message']: on an HTML or
+                // empty error body json() returns null and the array access
+                // would warn before falling through to the default message.
+                $error = $response->json('message') ?? 'خطا در ارتباط با سرور ایناماد';
                 
                 Log::channel('enamad')->error('Enamad verification failed', [
                     'status_code' => $response->status(),
