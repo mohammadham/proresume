@@ -449,7 +449,20 @@ if (!function_exists('getUser')) {
             // if current URL is a path based URL
             if ($host == env('WEBSITE_HOST')) {
                 $path = explode('/', $parsedUrl['path']);
-                $username = $path[1];
+
+                // Subdirectory installs expose the app under a base path
+                // (e.g. http://localhost/proresume/{username}), so the first
+                // path segment is the install directory, not the username.
+                // Derive the base path from APP_URL so the segment count is
+                // computed from the real install location instead of being
+                // hardcoded, then walk past it to reach the username.
+                $basePath = trim(parse_url(config('app.url'), PHP_URL_PATH), '/');
+
+                if ($basePath !== '' && count($path) > 2 && $path[1] === $basePath) {
+                    $username = $path[2];
+                } else {
+                    $username = $path[1];
+                }
             }
             // if the current URL is a subdomain
             else {
