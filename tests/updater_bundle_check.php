@@ -119,7 +119,36 @@ $required = [
     ['theme10 footer', 'resources/views/user/profile1/theme10/layout.blade.php', 'partials.enamad'],
     ['theme11 footer', 'resources/views/user/profile1/theme11/layout.blade.php', 'partials.enamad'],
     ['theme12 footer', 'resources/views/user/profile1/theme12/layout.blade.php', 'partials.enamad'],
+
+    // The watermark partial. Thirteen footers include it, so its absence
+    // is not a missing feature but a blank page: every one of those
+    // templates would fatal on "View [partials.watermark] not found".
+    ['watermark partial', 'resources/views/partials/watermark.blade.php', 'watermark'],
+
+    // All 24 Iranian gateway routes live in this file. Without it the
+    // bundle ships a routes/web.php that reaches none of them.
+    ['Iranian gateway routes', 'routes/payment_gateways.php', 'mellat/success'],
 ];
+
+// The six Iranian gateways, each with a controller for the public checkout
+// and one for the tenant's own purchase, plus the two settings controllers
+// that own the admin/user update endpoints. Those two were present in the
+// bundle but stale - they carried none of the update methods, so saving
+// Mellat settings after an update would have hit a missing method.
+$iranian = ['ZarinPal', 'Zibal', 'IdPay', 'NextPay', 'PayIr', 'Mellat'];
+foreach (['app/Http/Controllers/Payment', 'app/Http/Controllers/User/Payment'] as $dir) {
+    foreach ($iranian as $gateway) {
+        $required[] = ["{$gateway} controller", "{$dir}/{$gateway}Controller.php", 'class ' . $gateway . 'Controller'];
+    }
+}
+foreach ([
+    ['admin gateway settings', 'app/Http/Controllers/Admin/GatewayController.php', 'function mellatUpdate'],
+    ['user gateway settings', 'app/Http/Controllers/User/GatewayController.php', 'function mellatUpdate'],
+    ['enamad HTTP controller', 'app/Http/Controllers/EnamadController.php', 'class EnamadController'],
+    ['midtrans bank notify', 'app/Http/Controllers/MidtransBankNotifyController.php', 'class MidtransBankNotifyController'],
+] as $row) {
+    $required[] = $row;
+}
 
 // The seal partial is only renderable if every footer that includes it also
 // lands, and vice versa: the replace is all-or-nothing per file, so a footer
@@ -144,6 +173,96 @@ foreach ($footerFiles as $rel) {
     ok("footer requests the seal correctly: $rel");
 }
 unset($sealPartialSrc);
+
+// ---------------------------------------------------------------- closure
+// Hand-listing the files above only covers what someone remembered to
+// list. The bundle's own routes and blades can be asked directly: after
+// the delete-then-replace, does everything they reference still exist?
+// A route whose controller the bundle dropped, or a blade that includes a
+// partial the bundle dropped, is a 500 on a live customer site.
+echo "\n== closure: the bundle references only what it ships ==\n";
+
+$updaterRoutes = glob($root . '/updater/routes/*.php') ?: [];
+$controllerRefs = [];
+foreach ($updaterRoutes as $routeFile) {
+    $src = (string) file_get_contents($routeFile);
+    if (preg_match_all("/['\"]([A-Za-z0-9_\\\\]+Controller)@([A-Za-z0-9_]+)['\"]/", $src, $m, PREG_SET_ORDER)) {
+        foreach ($m as $hit) {
+            $class = $hit[1];
+            $pos = strpos($class, '\\');
+            $ns = $pos !== false ? substr($class, 0, $pos) : '';
+            $short = $pos !== false ? substr($class, $pos + 1) : $class;
+            $controllerRefs[$ns . '\\' . $short] = $ns === '' ? $short . '.php' : $ns . '/' . $short . '.php';
+        }
+    }
+}
+$missingControllers = [];
+foreach ($controllerRefs as $class => $rel) {
+    if (!is_file($root . '/updater/app/Http/Controllers/' . $rel)) {
+        $missingControllers[$class] = $rel;
+    }
+}
+$missingControllers === []
+    ? ok('every controller the bundle routes reference ships with the bundle (' . count($controllerRefs) . ' refs)')
+    : bad('controllers the bundle routes reference but does not ship: ' . implode(', ', array_keys($missingControllers)));
+
+// Views: @include / @includeIf / @extends, resolving dot notation to a path.
+// A package view (ns::name) resolves through vendor/, not this tree.
+$viewRoot = $root . '/updater/resources/views';
+$viewRefs = [];
+$viewIt = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($viewRoot));
+foreach ($viewIt as $file) {
+    if ($file->isDir() || substr($file->getFilename(), -10) !== '.blade.php') {
+        continue;
+    }
+    $src = (string) file_get_contents($file->getPathname());
+    if (preg_match_all("/@(?:include|includeIf|includeWhen|extends)\s*\(\s*'([^']+)'/", $src, $m, PREG_SET_ORDER)) {
+        foreach ($m as $hit) {
+            if (strpos($hit[1], '::') !== false) {
+                continue;
+            }
+            $viewRefs[str_replace('.', '/', $hit[1]) . '.blade.php'] = true;
+        }
+    }
+}
+// Only a view the app ships and the bundle dropped is a gap. A view neither
+// ships is a dead reference that predates this check.
+$missingViews = [];
+foreach (array_keys($viewRefs) as $rel) {
+    if (!is_file($viewRoot . '/' . $rel) && is_file($root . '/resources/views/' . $rel)) {
+        $missingViews[] = $rel;
+    }
+}
+$missingViews === []
+    ? ok('every view the bundle blades include ships with the bundle (' . count($viewRefs) . ' refs)')
+    : bad('views the bundle blades include but do not ship: ' . implode(', ', $missingViews));
+
+// Migrations are invisible to both guards above - nothing in a route or a
+// blade names them - yet the replace wipes database/migrations/ wholesale.
+// The API feature writes users.service_type/lat/lng and basic_settings.api_key,
+// and ApiIntegrationController reads Province::all() and City::where(), so a
+// bundle that never creates those columns leaves the feature broken on any
+// install made from it. Compared by the table each migration creates, not by
+// filename: the bundle legitimately carries the same tables under its own
+// dates.
+$tablesIn = function (string $dir): array {
+    $out = [];
+    foreach (glob($dir . '/*.php') ?: [] as $file) {
+        $body = (string) file_get_contents($file);
+        if (preg_match_all("/Schema::create\(\s*'([a-z_]+)'/", $body, $m)) {
+            foreach ($m[1] as $table) {
+                $out[$table] = true;
+            }
+        }
+    }
+    return $out;
+};
+$appTables = $tablesIn($root . '/database/migrations');
+$bundleTables = $tablesIn($root . '/updater/database/migrations');
+$uncreatableTables = array_diff_key($appTables, $bundleTables);
+$uncreatableTables === []
+    ? ok('every table the app migrates, the bundle can also create (' . count($appTables) . ' tables)')
+    : bad('tables the app migrates but the bundle cannot create: ' . implode(', ', array_keys($uncreatableTables)));
 
 foreach ($required as [$desc, $rel, $marker]) {
     $file = $sandbox . '/' . $rel;

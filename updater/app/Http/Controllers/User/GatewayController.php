@@ -37,7 +37,10 @@ class GatewayController extends Controller
         $data['yoco'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'yoco')->first();
         $data['myfatoorah'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'myfatoorah')->first();
         $data['xendit'] = UserPaymentGateway::where('user_id', $userId)->where('keyword', 'xendit')->first();
-
+        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir'] as $kw) {
+            $data[$kw] = UserPaymentGateway::where('user_id', $userId)->where('keyword', $kw)->first();
+        }
+        
         return view('user.gateways.index', $data);
     }
 
@@ -226,6 +229,80 @@ class GatewayController extends Controller
                 'information' => json_encode([
                     'perfect_money_wallet_id' => $request->perfect_money_wallet_id,
                     'text' => "Pay via your Perfect Money account."
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function zarinpalUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'merchant_id' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'zarinpal'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'zarinpal',
+                'name' => 'ZarinPal',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'merchant_id' => $request->merchant_id,
+                    'sandbox_status' => $request->sandbox_status,
+                    'callback_url' => $request->callback_url ?? url('zarinpal/success'),
+                    'text' => "پرداخت امن با زرین‌پال"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function zibalUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'merchant_id' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'zibal'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'zibal',
+                'name' => 'Zibal',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'merchant_id' => $request->merchant_id,
+                    'sandbox_status' => $request->sandbox_status,
+                    'description' => $request->description ?? 'پرداخت اشتراک',
+                    'text' => "پرداخت امن با زیبال"
                 ])
             ]
         );
@@ -634,6 +711,155 @@ class GatewayController extends Controller
 
         $request->session()->flash('success', __("Updated successfully") . '!');
 
+        return back();
+    }
+
+    public function idpayUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'api_key' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'idpay'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'idpay',
+                'name' => 'IDPay',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'api_key' => $request->api_key,
+                    'sandbox_status' => $request->sandbox_status,
+                    'text' => "پرداخت امن با آی دی پی"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function nextpayUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'api_key' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'nextpay'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'nextpay',
+                'name' => 'NextPay',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'api_key' => $request->api_key,
+                    'sandbox_status' => $request->sandbox_status,
+                    'text' => "پرداخت امن با نکست پی"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function payirUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'api_key' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'payir'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'payir',
+                'name' => 'Pay.ir',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'api_key' => $request->api_key,
+                    'sandbox_status' => $request->sandbox_status,
+                    'text' => "پرداخت امن با پی.ای آر"
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
+        return back();
+    }
+
+    public function mellatUpdate(Request $request)
+    {
+        $rules = [
+            'status' => 'required',
+            'terminal_id' => 'required',
+            'username' => 'required',
+            'password' => 'required',
+            'sandbox_status' => 'required',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return redirect()->back()->withErrors($validator->errors());
+        }
+
+        UserPaymentGateway::query()->updateOrCreate(
+            [
+                'user_id' => Auth::guard('web')->user()->id,
+                'keyword' => 'mellat'
+            ],
+            $request->except(['_token', 'information', 'keyword']) + [
+                'user_id' => Auth::guard('web')->user()->id,
+                'status' => (int)$request->status,
+                'keyword' => 'mellat',
+                'name' => 'Bank Mellat',
+                'type' => 'automatic',
+                'information' => json_encode([
+                    'terminal_id' => $request->terminal_id,
+                    'username' => $request->username,
+                    'password' => $request->password,
+                    'sandbox_status' => $request->sandbox_status,
+                    'callback_url' => $request->callback_url ?? url('mellat/success'),
+                    'text' => $request->text ?? 'پرداخت امن با بانک ملت',
+                ])
+            ]
+        );
+
+        session()->flash('success', __('Updated successfully'));
         return back();
     }
 

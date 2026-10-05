@@ -36,7 +36,10 @@ class GatewayController extends Controller
         $data['xendit'] = PaymentGateway::where('keyword', 'xendit')->first();
         $data['yoco'] = PaymentGateway::where('keyword', 'yoco')->first();
         $data['perfect_money'] = PaymentGateway::where('keyword', 'perfect_money')->first();
-
+        foreach (['zarinpal', 'zibal', 'idpay', 'nextpay', 'payir', 'mellat'] as $kw) {
+            $data[$kw] = PaymentGateway::where('keyword', $kw)->first();
+        }
+        
         return view('admin.gateways.index', $data);
     }
 
@@ -368,6 +371,118 @@ class GatewayController extends Controller
         Session::flash('success', __('Updated Perfect Money\'s Information Successfully') . '.');
 
         return redirect()->back();
+    }
+
+    public function zarinpalUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'merchant_id' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $zarinpal = PaymentGateway::where('keyword', 'zarinpal')->firstOrFail();
+        $zarinpal->status = $request->status;
+        $zarinpal->information = json_encode([
+            'merchant_id' => $request->merchant_id,
+            'sandbox_status' => $request->sandbox_status,
+            'callback_url' => $request->callback_url ?? url('zarinpal/success'),
+        ]);
+        $zarinpal->save();
+        return back()->with('success', 'ZarinPal Information Updated Successfully');
+    }
+
+    public function zibalUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'merchant_id' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $zibal = PaymentGateway::where('keyword', 'zibal')->firstOrFail();
+        $zibal->status = $request->status;
+        $zibal->information = json_encode([
+            'merchant_id' => $request->merchant_id,
+            'sandbox_status' => $request->sandbox_status,
+            'description' => $request->description ?? 'پرداخت اشتراک',
+        ]);
+        $zibal->save();
+        return back()->with('success', 'Zibal Information Updated Successfully');
+    }
+
+    public function idpayUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'api_key' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $idpay = PaymentGateway::where('keyword', 'idpay')->firstOrFail();
+        $idpay->status = $request->status;
+        $idpay->information = json_encode([
+            'api_key' => $request->api_key,
+            'sandbox_status' => $request->sandbox_status,
+        ]);
+        $idpay->save();
+        return back()->with('success', 'IDPay Information Updated Successfully');
+    }
+
+    public function nextpayUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'api_key' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $nextpay = PaymentGateway::where('keyword', 'nextpay')->firstOrFail();
+        $nextpay->status = $request->status;
+        $nextpay->information = json_encode([
+            'api_key' => $request->api_key,
+            'sandbox_status' => $request->sandbox_status,
+        ]);
+        $nextpay->save();
+        return back()->with('success', 'NextPay Information Updated Successfully');
+    }
+
+    public function payirUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'api_key' => 'required|string',
+            'sandbox_status' => 'required|integer',
+        ]);
+        $payir = PaymentGateway::where('keyword', 'payir')->firstOrFail();
+        $payir->status = $request->status;
+        $payir->information = json_encode([
+            'api_key' => $request->api_key,
+            'sandbox_status' => $request->sandbox_status,
+        ]);
+        $payir->save();
+        return back()->with('success', 'Pay.ir Information Updated Successfully');
+    }
+
+    public function mellatUpdate(Request $request)
+    {
+        $this->validate($request, [
+            'status' => 'required|integer',
+            'terminal_id' => 'required|string',
+            'username' => 'required|string',
+            'password' => 'required|string',
+            'sandbox_status' => 'required|integer',
+            'callback_url' => 'nullable|url',
+        ]);
+        $mellat = PaymentGateway::where('keyword', 'mellat')->firstOrFail();
+        $mellat->status = $request->status;
+        $mellat->information = json_encode([
+            'terminal_id' => $request->terminal_id,
+            'username' => $request->username,
+            'password' => $request->password,
+            'sandbox_status' => $request->sandbox_status,
+            'callback_url' => $request->callback_url,
+            'description' => $request->description ?? 'پرداخت اشتراک با بانک ملت',
+            'text' => $request->text ?? 'پرداخت امن با بانک ملت',
+        ]);
+        $mellat->save();
+        return back()->with('success', 'Bank Mellat Information Updated Successfully');
     }
 
     public function offline(Request $request)
