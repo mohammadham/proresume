@@ -58,7 +58,23 @@ class VerifyEnamad extends Command
             }
 
             $result = $response->json();
-            $status = $result['status'] ?? 'unknown';
+
+            // Malformed success payloads (empty body, an HTML error page sent
+            // with HTTP 200, JSON without a 'status' field) used to fall
+            // through to status=unknown and silently write enamad_status=0
+            // with exit code 0, indistinguishable from a real 'unknown'
+            // verdict. A scheduled verifier must fail loudly instead: log it,
+            // report it and leave the stored row untouched.
+            if (!is_array($result) || !array_key_exists('status', $result)) {
+                Log::channel('enamad')->error('Scheduled Enamad verification returned a malformed payload', [
+                    'http_status' => $response->status(),
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+                $this->error('Verification failed: malformed response payload (no status field)');
+                return 1;
+            }
+
+            $status = $result['status'];
             $isValid = in_array($status, ['active', 'verified'], true);
 
             $updateData = ['enamad_status' => $isValid ? 1 : 0];
