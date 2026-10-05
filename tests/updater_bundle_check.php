@@ -98,7 +98,52 @@ $required = [
     ['enamad digest mail view', 'resources/views/emails/enamad-digest.blade.php', 'verification failures digest'],
     ['payment digest mail view', 'resources/views/emails/payment-digest.blade.php', 'Payment gateway failures digest'],
     ['basic_settings enamad columns migration', 'database/migrations/2026_01_15_000007_add_enamad_fields_to_basic_settings_table.php', 'enamad_site_id'],
+
+    // The seal partial and every footer that renders it. The bundle replaces
+    // resources/views wholesale, so a footer shipped without the partial (or
+    // the reverse) leaves the customer's site throwing "View [partials.enamad]
+    // not found" on every page of that template.
+    ['enamad seal partial', 'resources/views/partials/enamad.blade.php', 'enamad_variant'],
+    ['front footer (floating widget)', 'resources/views/front/partials/footer.blade.php', 'partials.enamad'],
+    ['admin footer', 'resources/views/admin/partials/footer.blade.php', 'partials.enamad'],
+    ['tenant dashboard footer', 'resources/views/user/partials/footer.blade.php', 'partials.enamad'],
+    ['tenant profile layout footer (default theme)', 'resources/views/user/profile/layout.blade.php', 'partials.enamad'],
+    ['tenant profile1 base layout footer (themes 1-2)', 'resources/views/user/profile1/layout.blade.php', 'partials.enamad'],
+    ['theme3 footer (the theme that shipped without one)', 'resources/views/user/profile1/theme3/layout.blade.php', 'partials.enamad'],
+    ['theme4 footer', 'resources/views/user/profile1/theme4/layout.blade.php', 'partials.enamad'],
+    ['theme5 footer', 'resources/views/user/profile1/theme5/layout.blade.php', 'partials.enamad'],
+    ['theme6 footer', 'resources/views/user/profile1/theme6/layout.blade.php', 'partials.enamad'],
+    ['theme7 footer', 'resources/views/user/profile1/theme7/layout.blade.php', 'partials.enamad'],
+    ['theme8 footer', 'resources/views/user/profile1/theme8/layout.blade.php', 'partials.enamad'],
+    ['theme9 footer', 'resources/views/user/profile1/theme9/layout.blade.php', 'partials.enamad'],
+    ['theme10 footer', 'resources/views/user/profile1/theme10/layout.blade.php', 'partials.enamad'],
+    ['theme11 footer', 'resources/views/user/profile1/theme11/layout.blade.php', 'partials.enamad'],
+    ['theme12 footer', 'resources/views/user/profile1/theme12/layout.blade.php', 'partials.enamad'],
 ];
+
+// The seal partial is only renderable if every footer that includes it also
+// lands, and vice versa: the replace is all-or-nothing per file, so a footer
+// in the bundle whose partial is not would fatal on a live customer site.
+$footerFiles = array_values(array_filter(
+    array_column($required, 1),
+    static fn(string $rel): bool => str_ends_with($rel, 'layout.blade.php')
+        || in_array($rel, ['resources/views/front/partials/footer.blade.php', 'resources/views/admin/partials/footer.blade.php', 'resources/views/user/partials/footer.blade.php'], true)
+));
+$sealPartialSrc = (string) file_get_contents($root . '/resources/views/partials/enamad.blade.php');
+foreach ($footerFiles as $rel) {
+    $src = (string) file_get_contents($root . '/' . $rel);
+    if (strpos($src, "partials.enamad") === false) {
+        bad("footer lost its seal include: $rel - the partial would render nothing");
+        continue;
+    }
+    if (strpos($src, "'enamad_variant' => 'footer'") === false
+        && $rel !== 'resources/views/front/partials/footer.blade.php') {
+        bad("footer does not request the footer variant: $rel");
+        continue;
+    }
+    ok("footer requests the seal correctly: $rel");
+}
+unset($sealPartialSrc);
 
 foreach ($required as [$desc, $rel, $marker]) {
     $file = $sandbox . '/' . $rel;

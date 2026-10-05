@@ -87,6 +87,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Footer Seal
+    |--------------------------------------------------------------------------
+    |
+    | In-flow seal rendered inside the <footer> of a template, as opposed to
+    | the floating corner widget. A fixed-position badge works on the front
+    | site but covers page content on a tenant's single-page portfolio, so
+    | the tenant themes, the tenant dashboard and the admin panel use this
+    | one instead. Set enabled to false to hide the seal sitewide without
+    | removing it from the templates.
+    |
+    */
+
+    'footer' => [
+        'enabled' => env('ENAMAD_FOOTER_ENABLED', true),
+        'width' => 125,
+        'height' => 36,
+        'alignment' => 'center', // center, left, right
+        'margin' => '18px',
+        'show_title' => true,
+        'title_size' => 12,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Frontend Widget Settings
     |--------------------------------------------------------------------------
     */

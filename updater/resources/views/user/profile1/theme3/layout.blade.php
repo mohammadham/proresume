@@ -336,6 +336,23 @@
   @includeif('user.profile1.partials.plugins')
   {{-- plugins end --}}
   @yield('scripts')
+
+    {{-- This is the only profile theme that shipped without a footer block at
+         all, so there was nowhere to put the trust seal every other theme
+         carries. The strip is deliberately unstyled - no background, no columns
+         - so it reads as a caption on the page rather than a new design. --}}
+    <footer class="enamad-only-footer">
+        {{-- Enamad trust seal, rendered in the footer flow so it
+             follows the theme instead of floating over it. --}}
+        @include('partials.enamad', [
+            'enamad_variant' => 'footer',
+            'enamad_status' => $userBs->enamad_status ?? 0,
+            'enamad_site_id' => $userBs->enamad_site_id ?? '',
+            'enamad_code' => $userBs->enamad_code ?? '',
+            'enamad_logo_type' => $userBs->enamad_logo_type ?? 'auto',
+        ])
+    </footer>
+
     {{-- User-configured watermark badge: the profile owner's settings row.
          Base path must point at the user watermark upload dir. --}}
     @include('partials.watermark', [

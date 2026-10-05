@@ -363,6 +363,20 @@ $covExit === 0
     ? ok('every __()/@lang/trans() key used by a view resolves in the Persian namespace')
     : bad('some translation keys used by the views do not resolve');
 
+// ============================================================ phase 9
+echo "== Phase 9: Enamad trust seal in every footer ==\n";
+$sealOut = [];
+$lines = exec('php tests/enamad_footer_harness.php 2>&1', $sealOut, $sealExit);
+foreach ($sealOut as $line) {
+    if (strpos($line, 'Imagick') !== false) {
+        continue;
+    }
+    echo '    ' . $line . "\n";
+}
+$sealExit === 0
+    ? ok('enamad footer harness: every footer renders the seal and the updater carries it')
+    : bad('enamad footer harness failed');
+
 // ============================================================ summary
 echo "== Summary ==\n";
 echo "PASS: $passes  FAIL: $failures\n";

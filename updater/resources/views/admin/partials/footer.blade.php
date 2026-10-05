@@ -18,4 +18,13 @@
       {!! replaceBaseUrl($copyRightText->copyright_text) !!}
     </div>
   </div>
+    {{-- Enamad trust seal, rendered in the footer flow so it
+         follows the theme instead of floating over it. --}}
+    @include('partials.enamad', [
+        'enamad_variant' => 'footer',
+        'enamad_status' => $bs->enamad_status ?? 0,
+        'enamad_site_id' => $bs->enamad_site_id ?? '',
+        'enamad_code' => $bs->enamad_code ?? '',
+        'enamad_logo_type' => $bs->enamad_logo_type ?? 'auto',
+    ])
 </footer>

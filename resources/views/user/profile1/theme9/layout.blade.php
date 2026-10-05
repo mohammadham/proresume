@@ -156,7 +156,16 @@
                 </div>
             </div>
         </div>
-    </footer>
+    {{-- Enamad trust seal, rendered in the footer flow so it
+         follows the theme instead of floating over it. --}}
+    @include('partials.enamad', [
+        'enamad_variant' => 'footer',
+        'enamad_status' => $userBs->enamad_status ?? 0,
+        'enamad_site_id' => $userBs->enamad_site_id ?? '',
+        'enamad_code' => $userBs->enamad_code ?? '',
+        'enamad_logo_type' => $userBs->enamad_logo_type ?? 'auto',
+    ])
+</footer>
     <div class="progress-wrap">
         <svg class="progress-circle svg-content" width="100%" height="100%" viewBox="-1 -1 102 102">
             <path d="M50,1 a49,49 0 0,1 0,98 a49,49 0 0,1 0,-98" />

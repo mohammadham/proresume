@@ -78,6 +78,7 @@
     @include('partials.enamad', [
         'enamadStatus' => $bs->enamad_status ?? 0,
         'enamadSiteId' => $bs->enamad_site_id ?? '',
+        'enamadCode' => $bs->enamad_code ?? '',
         'enamadLogoType' => $bs->enamad_logo_type ?? 'auto',
     ])
 </footer><!--====== End Footer ======-->

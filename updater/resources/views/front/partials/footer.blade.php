@@ -48,7 +48,7 @@
     </div>
     @endif
 
-    @if ($bs->copyright_section == 1)   
+    @if ($bs->copyright_section == 1)
     <div class="copyright-area">
         <div class="container">
             <div class="col-lg-12">
@@ -61,4 +61,24 @@
         </div>
     </div>
     @endif
+
+    {{-- Admin-configured watermark badge. Base path is the admin upload
+         dir; the user profile layouts pass the user upload dir instead. --}}
+    @include('partials.watermark', [
+        'watermark_status' => $bs->watermark_status ?? 0,
+        'watermark_text' => $bs->watermark_text ?? '',
+        'watermark_url' => $bs->watermark_url ?? '',
+        'watermark_image' => $bs->watermark_image ?? '',
+        'watermark_base' => 'assets/front/img/',
+    ])
+
+    {{-- Enamad trust-seal badge. The partial existed but was never included
+         anywhere, so the badge configured in the admin panel never rendered.
+         Reads the site-wide (admin) settings row, same as the watermark. --}}
+    @include('partials.enamad', [
+        'enamadStatus' => $bs->enamad_status ?? 0,
+        'enamadSiteId' => $bs->enamad_site_id ?? '',
+        'enamadCode' => $bs->enamad_code ?? '',
+        'enamadLogoType' => $bs->enamad_logo_type ?? 'auto',
+    ])
 </footer><!--====== End Footer ======-->
