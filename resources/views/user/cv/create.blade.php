@@ -87,8 +87,7 @@
                         </div>
                     </div>
                     <div class="alert alert-info text-dark" id="ltrAlert" style="display: none;">
-                        {{ __('If you want to enter') }} <strong>{{ __('LTR word / text') }}</strong> {{ __('in') }} <strong>{{ __('Your Name, Your
-                            Occupation') }}</strong> {{ __('field, then wrap that') }} <strong>{{ __('word / text') }}</strong> {{ __('with') }}
+                        {{ __('If you want to enter') }} <strong>{{ __('LTR word / text') }}</strong> {{ __('in') }} <strong>{{ __('Your Name, Your Occupation') }}</strong> {{ __('field, then wrap that') }} <strong>{{ __('word / text') }}</strong> {{ __('with') }}
                         <strong><code>{{ '<span dir="ltr"></span>' }}</code></strong>
                         <br>
                         {{ __('For example,') }}

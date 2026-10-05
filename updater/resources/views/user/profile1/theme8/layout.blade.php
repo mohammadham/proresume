@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" @if ($userCurrentLang->rtl == 1) dir="rtl" @endif>
+<html lang="{{ currentHtmlLang() }}" @if ($userCurrentLang->rtl == 1) dir="rtl" @endif>
 
 <head>
   <!--====== Required meta tags ======-->
@@ -297,6 +297,15 @@
   @includeif('user.profile1.partials.plugins')
   {{-- plugins end --}}
   @yield('scripts')
+    {{-- User-configured watermark badge: the profile owner's settings row.
+         Base path must point at the user watermark upload dir. --}}
+    @include('partials.watermark', [
+        'watermark_status' => $userBs->watermark_status ?? 0,
+        'watermark_text' => $userBs->watermark_text ?? '',
+        'watermark_url' => $userBs->watermark_url ?? '',
+        'watermark_image' => $userBs->watermark_image ?? '',
+        'watermark_base' => 'assets/front/img/user/watermark/',
+    ])
 </body>
 
 </html>

@@ -1,5 +1,18 @@
+@if (Session::has('admin_lang'))
+    @php
+        app()->setLocale(Session::get('admin_lang'));
+        $admin_lang = Session::get('admin_lang');
+        $cd = str_replace('admin_', '', $admin_lang);
+        $default = \App\Models\Language::where('code', $cd)->first();
+    @endphp
+@else
+    @php
+        $default = \App\Models\Language::where('is_default', 1)->first();
+        app()->setLocale('admin_' . $default->code);
+    @endphp
+@endif
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="{{ currentHtmlLang() }}" @if (!empty($default) && $default->rtl == 1) dir="rtl" @endif>
 
 <head>
     <meta charset="utf-8">
@@ -9,23 +22,13 @@
     <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/login.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/forget.css') }}">
+    @if (!empty($default) && $default->rtl == 1)
+        <link rel="stylesheet" href="{{ asset('assets/admin/css/admin-rtl.css') }}">
+    @endif
 </head>
 
 
 <body>
-    @if (Session::has('admin_lang'))
-        @php
-            app()->setLocale(Session::get('admin_lang'));
-            $admin_lang = Session::get('admin_lang');
-            $cd = str_replace('admin_', '', $admin_lang);
-            $default = \App\Models\Language::where('code', $cd)->first();
-        @endphp
-    @else
-        @php
-            $default = \App\Models\Language::where('is_default', 1)->first();
-            app()->setLocale('admin_' . $default->code);
-        @endphp
-    @endif
     <div class="login-page">
         <div class="text-center mb-4">
             <img class="login-logo" src="{{ asset('assets/front/img/' . $bs->logo) }}" alt="">

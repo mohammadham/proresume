@@ -529,6 +529,36 @@ if (!function_exists('detailsUrl')) {
     }
 }
 
+if (!function_exists('keywordDictionaryAliases')) {
+    /**
+     * Publish the label form of every identifier key in a tenant keyword
+     * dictionary.
+     *
+     * The dictionary is keyed by identifier ("My_Resume"), but a number of
+     * tenant blades index it by the English label instead ("My Resume"). Those
+     * lookups can never resolve: they stay hidden while the tenant has content
+     * for the active language, and the moment it does not - which is exactly the
+     * state of a language that was just added, such as Persian - PHP raises
+     * "Undefined array key" and the tenant's home page 500s. Publishing the label
+     * form as well makes both spellings resolve to the same translated text,
+     * with no per-template changes.
+     */
+    function keywordDictionaryAliases(array $keywords): array
+    {
+        foreach ($keywords as $key => $value) {
+            if (!is_string($key) || strpos($key, '_') === false) {
+                continue;
+            }
+            $label = str_replace('_', ' ', $key);
+            if (!array_key_exists($label, $keywords)) {
+                $keywords[$label] = $value;
+            }
+        }
+
+        return $keywords;
+    }
+}
+
 if (!function_exists('getUserLanguageKeywords')) {
     function getUserLanguageKeywords($user)
     {
@@ -544,7 +574,9 @@ if (!function_exists('getUserLanguageKeywords')) {
 
         $userCurrentLang = $query->select('keywords')->first();
 
-        return $userCurrentLang ? json_decode($userCurrentLang->keywords, true) : [];
+        $keywords = $userCurrentLang ? json_decode((string) $userCurrentLang->keywords, true) : [];
+
+        return is_array($keywords) ? keywordDictionaryAliases($keywords) : [];
     }
 }
 
@@ -565,4 +597,29 @@ if (!function_exists('mb_strrev')) {
 function rtlAwareText($text, $isRtl)
 {
     return $isRtl === 'rtl' ? mb_strrev($text) : $text;
+}
+
+
+if (!function_exists('currentHtmlLang')) {
+    /**
+     * BCP-47 language code for the <html lang=""> attribute.
+     *
+     * The app keeps three translation namespaces by prefixing the locale with
+     * "admin_" (admin panel) and "user_" (user dashboard). Those prefixes are
+     * namespace bookkeeping, not real language subtags, so they must not leak
+     * into the document language - a Persian admin page has to announce
+     * lang="fa", not lang="admin_fa".
+     */
+    function currentHtmlLang()
+    {
+        $locale = (string) app()->getLocale();
+
+        foreach (['admin_', 'user_'] as $prefix) {
+            if (strpos($locale, $prefix) === 0) {
+                return substr($locale, strlen($prefix));
+            }
+        }
+
+        return $locale;
+    }
 }

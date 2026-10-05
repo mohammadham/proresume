@@ -182,9 +182,7 @@
                     @if ($cv->direction == 2)
                         <div class="row">
                             <div class="col-12">
-                                <div class="alert alert-info text-dark">
-                                    {{ __('If you want to enter') }} <strong>{{ __('LTR word / text') }}</strong> {{ __('in') }} <strong>{{ __('Contact Section
-                                        Title') }}</strong> {{ __('field, then wrap that') }} <strong>{{ __('word / text') }}</strong> {{ __('with') }}
+                                <div class="alert alert-info text-dark">{{ __('If you want to enter') }} <strong>{{ __('LTR word / text') }}</strong> {{ __('in') }} <strong>{{ __('Contact Section Title') }}</strong> {{ __('field, then wrap that') }} <strong>{{ __('word / text') }}</strong> {{ __('with') }}
                                     <strong><code>{{ '<span dir="ltr"></span>' }}</code></strong>
                                     <br>
                                     {{ __('For example,') }}

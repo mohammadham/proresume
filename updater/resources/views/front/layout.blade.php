@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" @if ($rtl == 1) dir="rtl" @endif>
+<html lang="{{ currentHtmlLang() }}" @if ($rtl == 1) dir="rtl" @endif>
 
 <head>
     <!--====== Required meta tags ======-->

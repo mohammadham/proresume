@@ -17,9 +17,16 @@ if (!app()->runningInConsole()) {
 //     return back()->with('success', "Successfully Migrate Database");
 // });
 
+// `setlang` matters here: nothing else on an unmatched request ever calls
+// App::setLocale(), so without it this view rendered in the *default* language -
+// a Persian visitor following a dead link landed on an English page.
+//
+// `abort(404)` rather than `return view('errors.404')`: returning the view
+// directly answered HTTP 200 for URLs that do not exist, which tells crawlers
+// the page is real and lets it get indexed.
 Route::fallback(function () {
-    return view('errors.404');
-});
+    abort(404);
+})->middleware('setlang');
 
 
 
@@ -1067,7 +1074,12 @@ if (array_key_exists('host', $parsedUrl)) {
     }
 }
 
-Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
+// `userWebsiteLang` on the whole tenant group, not just on some of its routes.
+// Only /contact, /appointment and the checkout flow carried it, so the rest of a
+// tenant website ignored the visitor's choice made with the tenant language
+// switcher and stayed in the site default language - and any controller that
+// answers with view('errors.404') rendered that page in the wrong language too.
+Route::group(['domain' => $domain, 'prefix' => $prefix, 'middleware' => 'userWebsiteLang'], function () {
     /*
     |--------------------------------------------------------------------------
     | Appointment Checkout Routes

@@ -17,7 +17,11 @@ class UserWebsiteLocale
      */
     public function handle(Request $request, Closure $next)
     {
-        
+        // NOTE: a tenant website (/username/...) resolves its language from the
+        // tenant's own `user_lang` session key and falls back to the *tenant's*
+        // default language, which userDetailView() also uses to pick content and
+        // the rtl flag. Do not fall back to the visitor's main-site language
+        // here: that would render Persian chrome around English tenant content.
         if (session()->has('user_lang')) {
 
             app()->setLocale(session()->get('user_lang'));

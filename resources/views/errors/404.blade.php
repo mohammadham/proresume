@@ -4,7 +4,7 @@
     {{__('Page Not Found')}}
 @endsection
 @section('breadcrumb-link')
-    {{__('404')}}
+    {{ __('Page Not Found Code') }}
 @endsection
 
 @section('content')

@@ -17,13 +17,20 @@ if (!app()->runningInConsole()) {
 //     return back()->with('success', "Successfully Migrate Database");
 // });
 
+// `setlang` matters here: nothing else on an unmatched request ever calls
+// App::setLocale(), so without it this view rendered in the *default* language -
+// a Persian visitor following a dead link landed on an English page.
+//
+// `abort(404)` rather than `return view('errors.404')`: returning the view
+// directly answered HTTP 200 for URLs that do not exist, which tells crawlers
+// the page is real and lets it get indexed.
 Route::fallback(function () {
-    return view('errors.404');
-});
+    abort(404);
+})->middleware('setlang');
 
 
 
-Route::get('/myfatoorah/cancel', 'Payment\MyFatoorahController@cancel')->name('membership.myfatoorah.cancel');
+Route::get('/myfatoorah/cancel', 'Payment\MyFatoorahController@cancelPayment')->name('membership.myfatoorah.cancel');
 Route::get('/myfatoorah/callback', 'Payment\MyFatoorahController@successPayment');
 Route::get('/check-payment', 'CronJobController@checkPayment')->name('cron.check_payment');
 
@@ -60,6 +67,19 @@ Route::domain($domain)->group(function () {
         Route::get('/check/{username}/username', 'Front\FrontendController@checkUsername')->name('front.username.check');
         Route::view('/success', 'front.success')->name('success.page');
     });
+
+    // Enamad Routes (Public API).
+    // These are called server-to-server by Enamad itself (and by the badge
+    // widget), so they cannot present a CSRF token - leaving VerifyCsrfToken on
+    // them made every POST return 419 and the verification could never run.
+    Route::post('/enamad/verify', 'EnamadController@verify')
+        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+        ->name('enamad.verify');
+    Route::get('/enamad/status', 'EnamadController@status')->name('enamad.status');
+    Route::get('/enamad/logo', 'EnamadController@logo')->name('enamad.logo');
+    Route::post('/enamad/verify/manual', 'EnamadController@manualVerify')
+        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+        ->name('enamad.verify.manual');
 
     Route::group(['middleware' => ['web', 'guest', 'setlang']], function () {
         Route::get('/registration/final-step', 'Front\FrontendController@step2')->name('front.registration.step2');
@@ -261,6 +281,7 @@ Route::domain($domain)->group(function () {
         Route::post('user/customer/ban', 'User\UserController@userban')->name('user.customer.ban');
         Route::get('register/customer/details/{customer}', 'User\UserController@view')->name('register.customer.view');
         Route::post('register/customer/email', 'User\UserController@emailStatus')->name('register.customer.email');
+        
         Route::get('/register-user', 'User\UserController@registerUsers')->name('user.register-user');
         Route::get('register/customer/{customer}/changePassword', 'User\UserController@changePassCstmr')->name('register.customer.changePass');
         Route::post('register/customer/updatePassword', 'User\UserController@updatePasswordCstmr')->name('register.customer.updatePassword');
@@ -300,6 +321,14 @@ Route::domain($domain)->group(function () {
 
         Route::get('footer-section', 'User\BasicSettingController@footerSection')->name('user.footer_section.index');
         Route::post('footer-section/update', 'User\BasicSettingController@updateFooterSection')->name('user.footer_section.update');
+
+        // user watermark routes
+        Route::get('/watermark', 'User\BasicSettingController@watermark')->name('user.watermark');
+        Route::post('/watermark/update', 'User\BasicSettingController@updateWatermark')->name('user.watermark.update');
+
+        // user enamad routes
+        Route::get('/enamad', 'User\BasicSettingController@enamad')->name('user.enamad');
+        Route::post('/enamad/update', 'User\BasicSettingController@updateEnamad')->name('user.enamad.update');
 
         //user preference
         Route::get('preference', 'User\PreferenceController@index')->name('user.preference.index');
@@ -593,6 +622,14 @@ Route::domain($domain)->group(function () {
             // Admin Basic Information Routes
             Route::get('/basicinfo', 'Admin\BasicController@basicinfo')->name('admin.basicinfo');
             Route::post('/basicinfo/post', 'Admin\BasicController@updatebasicinfo')->name('admin.basicinfo.update');
+
+            // Admin Watermark Routes
+            Route::get('/watermark', 'Admin\BasicController@watermark')->name('admin.watermark');
+            Route::post('/watermark/update', 'Admin\BasicController@updateWatermark')->name('admin.watermark.update');
+
+            // Admin Enamad Routes
+            Route::get('/enamad', 'Admin\BasicController@enamad')->name('admin.enamad');
+            Route::post('/enamad/update', 'Admin\BasicController@updateEnamad')->name('admin.enamad.update');
 
             // Admin Email Settings Routes
             Route::get('/mail-from-admin', 'Admin\EmailController@mailFromAdmin')->name('admin.mailFromAdmin');
@@ -964,10 +1001,9 @@ Route::domain($domain)->group(function () {
     });
     Route::group(['middleware' => ['web', 'setlang']], function () {
         Route::post('/coupon', 'Front\CheckoutController@coupon')->name('front.membership.coupon');
-        Route::post('/membership/checkout', 'Front\CheckoutController@checkout')
-            ->name('front.membership.checkout')
-            ->middleware('Demo');
-        Route::post('/payment/instructions', 'Front\FrontendController@paymentInstruction')->name('front.payment.instructions');            Route::post('/admin/contact-msg', 'Front\FrontendController@adminContactMessage')->name('front.admin.contact.message');
+        Route::post('/membership/checkout', 'Front\CheckoutController@checkout')->name('front.membership.checkout');
+        Route::post('/payment/instructions', 'Front\FrontendController@paymentInstruction')->name('front.payment.instructions');
+        Route::post('/admin/contact-msg', 'Front\FrontendController@adminContactMessage')->name('front.admin.contact.message');
         //checkout payment gateway routes
         Route::prefix('membership')->group(function () {
             Route::get('paypal/success', 'Payment\PaypalController@successPayment')->name('membership.paypal.success');
@@ -975,7 +1011,7 @@ Route::domain($domain)->group(function () {
             Route::get('stripe/cancel', 'Payment\StripeController@cancelPayment')->name('membership.stripe.cancel');
             Route::post('paytm/payment-status', 'Payment\PaytmController@paymentStatus')->name('membership.paytm.status');
             Route::get('paystack/success', 'Payment\PaystackController@successPayment')->name('membership.paystack.success');
-            Route::post('mercadopago/cancel', 'Payment\paymenMercadopagoController@cancelPayment')->name('membership.mercadopago.cancel');
+            Route::post('mercadopago/cancel', 'Payment\MercadopagoController@cancelPayment')->name('membership.mercadopago.cancel');
             Route::post('mercadopago/success', 'Payment\MercadopagoController@successPayment')->name('membership.mercadopago.success');
             Route::post('razorpay/success', 'Payment\RazorpayController@successPayment')->name('membership.razorpay.success');
             Route::post('razorpay/cancel', 'Payment\RazorpayController@cancelPayment')->name('membership.razorpay.cancel');
@@ -1038,7 +1074,12 @@ if (array_key_exists('host', $parsedUrl)) {
     }
 }
 
-Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
+// `userWebsiteLang` on the whole tenant group, not just on some of its routes.
+// Only /contact, /appointment and the checkout flow carried it, so the rest of a
+// tenant website ignored the visitor's choice made with the tenant language
+// switcher and stayed in the site default language - and any controller that
+// answers with view('errors.404') rendered that page in the wrong language too.
+Route::group(['domain' => $domain, 'prefix' => $prefix, 'middleware' => 'userWebsiteLang'], function () {
     /*
     |--------------------------------------------------------------------------
     | Appointment Checkout Routes
@@ -1049,8 +1090,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
     });
     Route::post('/checkout', 'Front\UsercheckoutController@userCheckout')->name('customer.checkout')->middleware('userWebsiteLang');
     Route::get('/checkout/payment', 'Front\UsercheckoutController@checkoutFinal')->name('customer.payment')->middleware('userWebsiteLang');
-    Route::post('/appointment/checkout', 'Front\UsercheckoutController@checkout')->name('front.user.appointment.checkout')
-        ->middleware(['userWebsiteLang', 'Demo']);
+    Route::post('/appointment/checkout', 'Front\UsercheckoutController@checkout')->name('front.user.appointment.checkout')->middleware('userWebsiteLang');
 
     Route::prefix('appointment')->group(function () {
         Route::get('/online/success/{appointment}', 'Front\UsercheckoutController@customerSuccess')->name('customer.success.page');
@@ -1058,7 +1098,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
         Route::get('paypal/cancel', 'User\Payment\PaypalController@cancelPayment')->name('customer.appointment.paypal.cancel');
         Route::get('stripe/cancel', 'User\Payment\StripeController@cancelPayment')->name('customer.appointment.stripe.cancel');
         Route::get('paystack/success', 'User\Payment\PaystackController@successPayment')->name('customer.appointment.paystack.success');
-        Route::post('mercadopago/cancel', 'User\Payment\paymenMercadopagoController@cancelPayment')->name('customer.appointment.mercadopago.cancel');
+        Route::post('mercadopago/cancel', 'User\Payment\MercadopagoController@cancelPayment')->name('customer.appointment.mercadopago.cancel');
         Route::post('mercadopago/success', 'User\Payment\MercadopagoController@successPayment')->name('customer.appointment.mercadopago.success');
         Route::post('razorpay/success', 'User\Payment\RazorpayController@successPayment')->name('customer.appointment.razorpay.success');
         Route::post('razorpay/cancel', 'User\Payment\RazorpayController@cancelPayment')->name('customer.appointment.razorpay.cancel');
@@ -1153,8 +1193,7 @@ Route::group(['domain' => $domain, 'prefix' => $prefix], function () {
             // reset password route
             Route::get('/reset-password', 'Front\CustomerController@resetPassword')->name('customer.reset_password');
             // user reset password submit route
-            Route::post('/reset-password-submit', 'Front\CustomerController@resetPasswordSubmit')
-                ->name('customer.reset_password_submit');
+            Route::post('/reset-password-submit', 'Front\CustomerController@resetPasswordSubmit')->name('customer.reset_password_submit');
             // user redirect to signup page route
             Route::get('/signup', 'Front\CustomerController@signup')->name('customer.signup');
             // user signup submit route

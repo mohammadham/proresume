@@ -257,8 +257,8 @@
                 <div class="col-lg-6">
                     <div class="section-title mb-40">
                         <span
-                            class="span">{{$home_text->achievement_title ?? $keywords['Achievements']}}</span>
-                        <h2>{{$home_text->achievement_subtitle ?? $keywords['Achievements']}}</h2>
+                            class="span">{{$home_text->achievement_title ?? ($keywords['Achievements'] ?? __('Achievements'))}}</span>
+                        <h2>{{$home_text->achievement_subtitle ?? ($keywords['Achievements'] ?? __('Achievements'))}}</h2>
                     </div>
                 </div>
             </div>

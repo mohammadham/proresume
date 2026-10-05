@@ -312,7 +312,13 @@ class AppServiceProvider extends ServiceProvider
 
             app()->setLocale($userCurrentLang->code);
 
-            $keywords = json_decode($userCurrentLang->keywords, true);
+            // Tenant blades index this dictionary by identifier ("My_Resume")
+            // and by English label ("My Resume") alike; keywordDictionaryAliases()
+            // publishes both so neither form can raise "Undefined array key"
+            // when the tenant has no content row for the active language.
+            $keywords = keywordDictionaryAliases(
+                (array) json_decode((string) $userCurrentLang->keywords, true)
+            );
 
             $userBs = BasicSetting::where('user_id', $user->id)->first();
             $social_medias = $user->social_media()->get() ?? collect([]);

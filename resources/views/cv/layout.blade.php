@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" @yield('rtl')>
+<html lang="{{ currentHtmlLang() }}" @yield('rtl')>
     <head>
         <!--====== Required meta tags ======-->
         <meta charset="utf-8">

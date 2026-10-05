@@ -54,7 +54,7 @@
                                 <button class="btn btn-danger float-right btn-sm mr-2 d-none bulk-delete"
                                     data-href="{{ route('user.blog.category.bulk.delete') }}"><i
                                         class="flaticon-interface-5"></i>
-                                    {{ __(' Delete') }}</button>
+                                    {{ __('Delete') }}</button>
                             @endif
                         </div>
                     </div>
