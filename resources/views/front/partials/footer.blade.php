@@ -72,9 +72,10 @@
         'watermark_base' => 'assets/front/img/',
     ])
 
-    {{-- Enamad trust-seal badge. The partial existed but was never included
-         anywhere, so the badge configured in the admin panel never rendered.
-         Reads the site-wide (admin) settings row, same as the watermark. --}}
+    {{-- Enamad trust seal. In-flow inside this footer, not a floating badge:
+         a position:fixed badge covers page content and ignores the theme's
+         own layout. Reads the site-wide (admin) settings row, same as the
+         watermark. --}}
     @include('partials.enamad', [
         'enamadStatus' => $bs->enamad_status ?? 0,
         'enamadSiteId' => $bs->enamad_site_id ?? '',

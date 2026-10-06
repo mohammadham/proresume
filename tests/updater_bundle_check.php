@@ -103,8 +103,8 @@ $required = [
     // resources/views wholesale, so a footer shipped without the partial (or
     // the reverse) leaves the customer's site throwing "View [partials.enamad]
     // not found" on every page of that template.
-    ['enamad seal partial', 'resources/views/partials/enamad.blade.php', 'enamad_variant'],
-    ['front footer (floating widget)', 'resources/views/front/partials/footer.blade.php', 'partials.enamad'],
+    ['enamad seal partial', 'resources/views/partials/enamad.blade.php', 'enamad-footer-seal'],
+    ['front footer', 'resources/views/front/partials/footer.blade.php', 'partials.enamad'],
     ['admin footer', 'resources/views/admin/partials/footer.blade.php', 'partials.enamad'],
     ['tenant dashboard footer', 'resources/views/user/partials/footer.blade.php', 'partials.enamad'],
     ['tenant profile layout footer (default theme)', 'resources/views/user/profile/layout.blade.php', 'partials.enamad'],
@@ -165,9 +165,8 @@ foreach ($footerFiles as $rel) {
         bad("footer lost its seal include: $rel - the partial would render nothing");
         continue;
     }
-    if (strpos($src, "'enamad_variant' => 'footer'") === false
-        && $rel !== 'resources/views/front/partials/footer.blade.php') {
-        bad("footer does not request the footer variant: $rel");
+    if (strpos($src, "'enamad_variant'") !== false) {
+        bad("footer still passes a variant argument: $rel - the partial is footer-only now, the argument is dead");
         continue;
     }
     ok("footer requests the seal correctly: $rel");

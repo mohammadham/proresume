@@ -111,17 +111,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Frontend Widget Settings
+    | Seal Appearance
     |--------------------------------------------------------------------------
+    |
+    | Only the two properties that survived the removal of the floating
+    | badge: the in-flow seal still rounds its corners and casts a shadow,
+    | which is what keeps it from looking pasted onto the footer. The old
+    | position/opacity/z-index/mobile-offset keys are gone - they only ever
+    | configured the badge, and leaving them invites someone to "restore"
+    | an overlay that covers page content.
     */
     'widget' => [
-        'position' => 'bottom-left', // bottom-left, bottom-right, top-left, top-right
-        'opacity' => 0.8,
-        'hover_opacity' => 1.0,
         'border_radius' => 8,
         'box_shadow' => '0 4px 12px rgba(0,0,0,0.15)',
-        'z_index' => 1000,
-        'mobile_bottom' => 80, // px from bottom on mobile
-        'mobile_right' => 15, // px from right on mobile
     ],
 ];

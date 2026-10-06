@@ -2,23 +2,23 @@
 /**
  * Enamad trust-seal footer harness.
  *
- * The seal used to exist as a partial that only the front site footer included,
- * and only as a fixed-position corner badge - which is the wrong shape for a
- * tenant's single-page portfolio, where it covers content and ignores the
- * theme. It now has two variants, and every footer that exists in the codebase
- * has to ship the matching one:
+ * The seal used to exist as a partial that only the front site footer
+ * included, and only as a fixed-position corner badge - which is the wrong
+ * shape for a tenant's single-page portfolio, where it covers content and
+ * ignores the theme. It is now one in-flow seal that every footer ships:
  *
- *   1. Every blade containing a <footer> block includes partials.enamad, and
- *      asks for the 'footer' variant (the front footer keeps the widget).
+ *   1. Every blade containing a <footer> block includes partials.enamad.
  *      A footer that forgot the include renders a page with no seal and no
  *      error, so nothing else would notice.
- *   2. The footer variant is in-flow (no position:fixed), links to the verify
- *      page, and carries enamad_code - Enamad resolves the seal from the code
- *      as well as the id, and omitting it returns a generic placeholder after a
- *      renewal.
+ *   2. The seal is in-flow (no position:fixed), links to the verify page,
+ *      and carries enamad_code - Enamad resolves the seal from the code as
+ *      well as the id, and omitting it returns a generic placeholder after
+ *      a renewal.
  *   3. Nothing renders when the seal is off (status 0, no id, or
  *      enamad.footer.enabled = false).
- *   4. The float variant is unchanged, so the front site does not regress.
+ *   4. Nothing floats. The badge variant is gone, not merely unused: a
+ *      fixed overlay on a single-page portfolio covers content, and a site
+ *      owner who cannot place their own seal removes it.
  *   5. updater/ carries the partial AND every footer that includes it. The
  *      bundle replaces resources/views wholesale, so a footer shipped without
  *      its partial is a fatal on a live customer site, not a no-op.
@@ -81,14 +81,10 @@ foreach ($footers as $rel) {
         bad("footer includes the seal: $rel");
         continue;
     }
-    // The front footer is the one place the floating widget is correct.
-    $isFront = $rel === 'resources/views/front/partials/footer.blade.php';
-    $wantsFooter = strpos($src, "'enamad_variant' => 'footer'") !== false;
-    if ($isFront || $wantsFooter) {
-        ok("footer includes the seal: $rel");
-    } else {
-        bad("footer includes the seal: $rel", 'does not request the footer variant');
-    }
+    // Every footer, including the front site, now takes the same in-flow
+    // shape. There is no floating variant left to opt out of, so a footer
+    // that includes the partial at all is correct.
+    ok("footer includes the seal: $rel");
 }
 
 // The tenant themes are the reason this exists: every one of them must carry
@@ -119,19 +115,18 @@ foreach ($themes as $dir) {
 check($themeFooters >= 9, 'every tenant theme that has a footer carries the seal', "got {$themeFooters}");
 
 // ------------------------------------------------------------ 2. the rendering
-echo "\n== 2. the footer variant renders correctly ==\n";
+echo "\n== 2. the seal renders correctly ==\n";
 $render = function (array $data): string {
     return (string) view('partials.enamad', $data)->render();
 };
 
 $html = $render([
-    'enamad_variant' => 'footer',
     'enamad_status' => 1,
     'enamad_site_id' => 'SITE-1',
     'enamad_code' => 'CODE-1',
     'enamad_logo_type' => 'dark',
 ]);
-check(strpos($html, 'enamad-footer-seal') !== false, 'footer variant emits the seal container');
+check(strpos($html, 'enamad-footer-seal') !== false, 'the seal container is emitted');
 check(strpos($html, 'position: fixed') === false, 'footer variant is in-flow, not a floating badge');
 check(strpos($html, 'trustseal.enamad.ir/verify?id=SITE-1') !== false, 'seal links to the verify page');
 check(strpos($html, 'logo.aspx?id=SITE-1&amp;Code=CODE-1&amp;type=dark') !== false,
@@ -142,7 +137,6 @@ check(strpos($html, '<script') === false, 'footer variant ships no widget script
 // URL-encoding matters: a site id or code carrying & or space would otherwise
 // break the query string.
 $html = $render([
-    'enamad_variant' => 'footer',
     'enamad_status' => 1,
     'enamad_site_id' => 'A B&C',
     'enamad_code' => 'D/E',
@@ -154,36 +148,41 @@ check(strpos($html, 'Code=D%2FE') !== false, 'code is url-encoded');
 // ------------------------------------------------------------- 3. nothing when off
 echo "\n== 3. nothing renders when the seal is off ==\n";
 check(trim($render([
-    'enamad_variant' => 'footer', 'enamad_status' => 0,
+    'enamad_status' => 0,
     'enamad_site_id' => 'SITE-1', 'enamad_code' => 'C', 'enamad_logo_type' => 'auto',
 ])) === '', 'status 0 renders nothing');
 check(trim($render([
-    'enamad_variant' => 'footer', 'enamad_status' => 1,
+    'enamad_status' => 1,
     'enamad_site_id' => '', 'enamad_code' => '', 'enamad_logo_type' => 'auto',
 ])) === '', 'an enabled seal with no site id renders nothing');
 config(['enamad.footer.enabled' => false]);
 check(trim($render([
-    'enamad_variant' => 'footer', 'enamad_status' => 1,
+    'enamad_status' => 1,
     'enamad_site_id' => 'SITE-1', 'enamad_code' => '', 'enamad_logo_type' => 'auto',
 ])) === '', 'enamad.footer.enabled = false hides the seal everywhere');
 config(['enamad.footer.enabled' => true]);
 
 // ------------------------------------------------- 4. the float variant is intact
-echo "\n== 4. the front site's floating widget is unchanged ==\n";
-$widget = $render([
-    'enamadStatus' => 1,
-    'enamadSiteId' => 'SITE-1',
-    'enamadCode' => 'CODE-1',
-    'enamadLogoType' => 'auto',
-]);
-check(strpos($widget, 'enamad-badge-container') !== false, 'default variant still emits the floating badge');
-check(strpos($widget, 'position: fixed') !== false, 'default variant keeps position:fixed');
-check(strpos($widget, 'trustseal.enamad.ir/logo.aspx?id=SITE-1&amp;Code=CODE-1') !== false,
-    'default variant now carries the code too');
-check(strpos($widget, 'enamad-footer-seal') === false, 'default variant does not emit the footer seal');
-// camelCase is what the pre-existing front-footer call passes; if the rewrite
-// had dropped it the front site would silently lose its badge.
-check(strpos($widget, 'enamad-badge-container') !== false, 'camelCase arguments still work');
+echo "\n== 4. the seal is footer-only, never a floating badge ==\n";
+// Asserts absence, not preference. The badge variant was deleted, so there
+// is nothing left that a caller could ask for - and the old argument name is
+// passed on purpose to prove a stale caller cannot resurrect it.
+$allRendered = '';
+foreach ([
+    ['camelCase', ['enamadStatus' => 1, 'enamadSiteId' => 'SITE-1', 'enamadCode' => 'CODE-1', 'enamadLogoType' => 'auto']],
+    ['snake_case', ['enamad_status' => 1, 'enamad_site_id' => 'SITE-1', 'enamad_code' => 'CODE-1', 'enamad_logo_type' => 'auto']],
+    ['stale variant arg', ['enamad_variant' => 'widget', 'enamadStatus' => 1, 'enamadSiteId' => 'SITE-1', 'enamadCode' => 'CODE-1', 'enamadLogoType' => 'auto']],
+] as [$label, $data]) {
+    $out = $render($data);
+    $allRendered .= $out;
+    $floats = strpos($out, 'position: fixed') !== false
+        || strpos($out, 'position:fixed') !== false
+        || strpos($out, 'enamad-badge-container') !== false;
+    check(! $floats, "no floating badge ($label)");
+    check(strpos($out, 'enamad-footer-seal') !== false, "the seal still renders ($label)");
+}
+check(strpos($allRendered, 'trustseal.js') === false, 'no trust-seal widget script anywhere');
+check(strpos($allRendered, 'EnamadTrustSeal') === false, 'no trust-seal JS init anywhere');
 
 // --------------------------------------------------------------- 5. updater bundle
 echo "\n== 5. the updater bundle carries the partial and every footer ==\n";
